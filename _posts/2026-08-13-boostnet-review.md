@@ -42,7 +42,7 @@ BoostNet 不一定适合只追求最低价格的用户。部分冷门地区节�
 
 BoostNet 的吸引力可以概括成一句话：**不只追求测速数字，更强调常用线路的稳定体验。**
 
-[前往 BoostNet 官网了解详情](https://boostnet.org/)
+[前往 BoostNet 官网了解详情](https://999.boostnet1.com/register?code=qo9BWfBU)
 
 ---
 
