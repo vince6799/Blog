@@ -9,7 +9,7 @@
 3. 打开 `Settings → Pages`。
 4. 选择 `Deploy from a branch`、`main` 和 `/(root)`，保存。
 
-如果仓库名不是 `用户名.github.io`，请把 `_config.yml` 中的 `baseurl` 改为 `/仓库名`。
+本站已配置自定义域名 `blog.a80s.com`，`_config.yml` 中的 `baseurl` 应保持为空，仓库根目录的 `CNAME` 文件请勿删除。
 
 ## 新增文章
 
