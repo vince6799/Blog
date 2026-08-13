@@ -2,11 +2,13 @@ title: 网络体验志
 description: 网络工具、效率产品与数字生活的真实体验
 lang: zh-CN
 timezone: Asia/Shanghai
-url: ""
-baseurl: ""
+
+url: "https://vince6799.github.io"
+baseurl: "/Blog"
+
 permalink: /articles/:title/
 markdown: kramdown
 theme: null
+
 plugins:
   - jekyll-feed
-
