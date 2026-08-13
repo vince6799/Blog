@@ -1,0 +1,14 @@
+.intro-grid{max-width:var(--max);margin:0 auto 72px;padding:64px 28px;display:grid;grid-template-columns:1fr 1.25fr;gap:80px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.intro-lead h2{margin:10px 0 0;font:700 clamp(31px,4.5vw,50px)/1.18 Georgia,"Songti SC",serif;letter-spacing:-.04em}
+.intro-copy p{margin:0 0 22px;color:var(--muted);font-size:17px}
+.intro-copy a{color:var(--green);font-weight:750;text-decoration:none}
+.topics{max-width:var(--max);margin:0 auto 110px;padding:0 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.topics>div{min-height:235px;padding:28px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.42)}
+.topics span{color:var(--green);font:700 12px Georgia,serif}
+.topics h3{margin:45px 0 8px;font:700 23px Georgia,"Songti SC",serif}
+.topics p{margin:0;color:var(--muted);font-size:14px}
+.page h2{margin-top:2.25em;font:700 27px/1.35 Georgia,"Songti SC",serif}
+.page{font-size:17px;line-height:1.95}
+.page>h1{margin-top:.6em;font-size:48px}
+.page code{padding:2px 7px;border-radius:5px;background:white;color:var(--green-dark)}
+@media(max-width:700px){.intro-grid{margin-bottom:54px;padding:46px 20px;grid-template-columns:1fr;gap:28px}.topics{padding:0 20px;margin-bottom:80px;grid-template-columns:1fr}.topics>div{min-height:190px}.topics h3{margin-top:28px}}

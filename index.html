@@ -3,14 +3,31 @@ layout: default
 title: 首页
 ---
 <section class="hero">
-  <p class="eyebrow">真实体验 · 清晰判断</p>
-  <h1>把复杂产品，<br>讲得简单一点。</h1>
-  <p>分享网络工具、效率产品与数字生活体验。既写优点，也说明限制。</p>
+  <p class="eyebrow">A80s · Since the early web</p>
+  <h1>写代码二十多年，<br>依然对世界好奇。</h1>
+  <p>这里是一名老程序员的日常分享：技术实践、产品观察、趁手工具，以及那些值得被认真记录的生活经验。</p>
+</section>
+
+<section class="intro-grid" aria-label="博客介绍">
+  <div class="intro-lead">
+    <p class="eyebrow">为什么写</p>
+    <h2>经验会过时，<br>思考可以留下。</h2>
+  </div>
+  <div class="intro-copy">
+    <p>从拨号上网、个人主页到云计算与人工智能，二十多年的技术生涯见证了许多浪潮。这个博客不追逐每一个热点，更关注技术背后的选择、产品是否真正好用，以及一件事经过时间检验后还剩下什么。</p>
+    <a href="{{ '/about/' | relative_url }}">了解作者与这个博客 →</a>
+  </div>
+</section>
+
+<section class="topics" aria-label="分享主题">
+  <div><span>01</span><h3>技术与开发</h3><p>工程实践、架构取舍和踩坑记录，尽量把“为什么”讲清楚。</p></div>
+  <div><span>02</span><h3>产品与工具</h3><p>关注真实体验与长期价值，不只罗列参数，也坦诚说明限制。</p></div>
+  <div><span>03</span><h3>数字与生活</h3><p>效率方法、阅读思考，以及程序之外那些值得分享的发现。</p></div>
 </section>
 
 <section class="articles">
   <div class="section-heading">
-    <h2>最新文章</h2>
+    <h2>最近写下</h2>
     <span>{{ site.posts | size }} 篇</span>
   </div>
   {% for post in site.posts %}
@@ -24,4 +41,3 @@ title: 首页
   </article>
   {% endfor %}
 </section>
-
