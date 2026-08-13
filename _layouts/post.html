@@ -1,0 +1,13 @@
+---
+layout: default
+---
+<article class="post">
+  <a class="back" href="{{ '/' | relative_url }}">← 返回文章列表</a>
+  <header class="post-header">
+    <p class="eyebrow">{{ page.category | default: "产品测评" }}</p>
+    <h1>{{ page.title }}</h1>
+    <p class="post-meta">{{ page.date | date: "%Y年%m月%d日" }} · {{ page.reading_time | default: "约 5 分钟阅读" }}</p>
+  </header>
+  <div class="post-content">{{ content }}</div>
+</article>
+
