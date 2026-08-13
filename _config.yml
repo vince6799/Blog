@@ -2,8 +2,8 @@ title: A80s · 程序员手记
 description: 一位拥有 20 多年经验的程序员，分享经验、感悟、测评与生活观察
 lang: zh-CN
 timezone: Asia/Shanghai
-url: "https://vince6799.github.io"
-baseurl: "/Blog"
+url: "https://blog.a80s.com"
+baseurl: ""
 permalink: /articles/:title/
 markdown: kramdown
 theme: null
