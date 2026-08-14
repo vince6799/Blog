@@ -53,7 +53,7 @@ Function Call 的边界到结果回传为止。工具发现、长任务状态和
 
 如果每个 AI 应用都单独适配 GitHub、数据库、文件系统和监控平台，开发工作会大量重复。Model Context Protocol（MCP）试图为这种连接提供统一协议。
 
-MCP 采用 Host、Client、Server 架构。Host 是承载用户和模型的 AI 应用；Client 负责与某个 Server 建立连接；Server 可以暴露三类核心能力：可执行的 Tools、可读取的 Resources，以及可复用的 Prompts。连接建立时还会协商协议版本和双方支持的能力。详细定义可以查看 [MCP 官方架构文档](https://modelcontextprotocol.io/docs/learn/architecture)。
+MCP 采用 Host、Client、Server 架构。Host 是承载用户和模型的 AI 应用；Client 负责与某个 Server 建立连接；Server 可以暴露三类核心能力：可执行的 Tools、可读取的 Resources，以及可复用的 Prompts。连接建立时还会协商协议版本和双方支持的能力。详细定义可以查看 [MCP 官方架构文档](https://modelcontextprotocol.io/docs/learn/architecture){:target="_blank" rel="noopener noreferrer"}。
 
 MCP 把工具接进来，Function Call 表达模型这一次要调什么。在许多实现里，MCP Server 列出的 Tool 仍会作为 Function Tool 交给模型。
 
@@ -95,7 +95,7 @@ Agent 经常在长任务里慢慢跑偏：把一次猜测写进摘要，后面�
 >
 > 模型不断搜索、总结、再搜索，看起来一直在工作，实际上没有可检查的完成条件。这样的循环消耗 token 很快，最后通常只得到一份更长的说明。先定义什么算完成，再开放自主决策。
 
-生产系统通常把两者混用：Workflow 管授权、审批和验收，Agent 处理无法预先列举的调查步骤。Anthropic 的 [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents) 也建议先用简单流程，任务确实需要时再增加自主性。
+生产系统通常把两者混用：Workflow 管授权、审批和验收，Agent 处理无法预先列举的调查步骤。Anthropic 的 [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents){:target="_blank" rel="noopener noreferrer"} 也建议先用简单流程，任务确实需要时再增加自主性。
 
 ### Agent Framework
 
@@ -171,7 +171,7 @@ Eval 是对 AI 系统进行可重复的质量测试。普通问答可以检查�
 
 一次 Eval 包含任务、初始环境、运行配置和评分器。同一个模型换了 Tool 描述、Harness、Sandbox 资源或上下文策略，结果都可能明显变化。Agent 评估测到的是模型和运行系统的组合，分数不能全部算在模型头上。
 
-Agent Eval 通常同时关注结果、必须遵守的过程约束，以及成本和延迟。不要机械要求唯一执行路径，因为开放任务可能有多种正确做法。还要区分 agent harness 与 evaluation harness：前者让模型执行任务，后者负责运行测试、隔离环境、评分和汇总。Anthropic 的 [Agent Evals](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) 对此有较完整的说明。
+Agent Eval 通常同时关注结果、必须遵守的过程约束，以及成本和延迟。不要机械要求唯一执行路径，因为开放任务可能有多种正确做法。还要区分 agent harness 与 evaluation harness：前者让模型执行任务，后者负责运行测试、隔离环境、评分和汇总。Anthropic 的 [Agent Evals](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents){:target="_blank" rel="noopener noreferrer"} 对此有较完整的说明。
 
 ## 一次排障任务不会按架构图顺利走完
 
@@ -201,9 +201,9 @@ Agent Eval 通常同时关注结果、必须遵守的过程约束，以及成本
 
 ## 参考资料
 
-[Model Context Protocol：Architecture overview](https://modelcontextprotocol.io/docs/learn/architecture)
-[OpenAI：Function calling](https://developers.openai.com/api/docs/guides/function-calling) · [Agents](https://developers.openai.com/api/docs/guides/agents)
-[OpenAI：Build skills](https://learn.chatgpt.com/docs/build-skills) · [Plugins](https://learn.chatgpt.com/docs/plugins)
-[Anthropic：Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
-[Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
-[Anthropic：Scaling managed agents](https://www.anthropic.com/engineering/managed-agents) · [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+[Model Context Protocol：Architecture overview](https://modelcontextprotocol.io/docs/learn/architecture){:target="_blank" rel="noopener noreferrer"}
+[OpenAI：Function calling](https://developers.openai.com/api/docs/guides/function-calling){:target="_blank" rel="noopener noreferrer"} · [Agents](https://developers.openai.com/api/docs/guides/agents){:target="_blank" rel="noopener noreferrer"}
+[OpenAI：Build skills](https://learn.chatgpt.com/docs/build-skills){:target="_blank" rel="noopener noreferrer"} · [Plugins](https://learn.chatgpt.com/docs/plugins){:target="_blank" rel="noopener noreferrer"}
+[Anthropic：Building effective agents](https://www.anthropic.com/engineering/building-effective-agents){:target="_blank" rel="noopener noreferrer"}
+[Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents){:target="_blank" rel="noopener noreferrer"}
+[Anthropic：Scaling managed agents](https://www.anthropic.com/engineering/managed-agents){:target="_blank" rel="noopener noreferrer"} · [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents){:target="_blank" rel="noopener noreferrer"}
