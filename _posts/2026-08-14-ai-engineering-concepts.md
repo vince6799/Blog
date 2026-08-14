@@ -201,9 +201,9 @@ Agent Eval 通常同时关注结果、必须遵守的过程约束，以及成本
 
 ## 参考资料
 
-[Model Context Protocol：Architecture overview](https://modelcontextprotocol.io/docs/learn/architecture){:target="_blank" rel="noopener noreferrer"}
-[OpenAI：Function calling](https://developers.openai.com/api/docs/guides/function-calling){:target="_blank" rel="noopener noreferrer"} · [Agents](https://developers.openai.com/api/docs/guides/agents){:target="_blank" rel="noopener noreferrer"}
-[OpenAI：Build skills](https://learn.chatgpt.com/docs/build-skills){:target="_blank" rel="noopener noreferrer"} · [Plugins](https://learn.chatgpt.com/docs/plugins){:target="_blank" rel="noopener noreferrer"}
-[Anthropic：Building effective agents](https://www.anthropic.com/engineering/building-effective-agents){:target="_blank" rel="noopener noreferrer"}
-[Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents){:target="_blank" rel="noopener noreferrer"}
-[Anthropic：Scaling managed agents](https://www.anthropic.com/engineering/managed-agents){:target="_blank" rel="noopener noreferrer"} · [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents){:target="_blank" rel="noopener noreferrer"}
+- [Model Context Protocol：Architecture overview](https://modelcontextprotocol.io/docs/learn/architecture){:target="_blank" rel="noopener noreferrer"}
+- [OpenAI：Function calling](https://developers.openai.com/api/docs/guides/function-calling){:target="_blank" rel="noopener noreferrer"} · [Agents](https://developers.openai.com/api/docs/guides/agents){:target="_blank" rel="noopener noreferrer"}
+- [OpenAI：Build skills](https://learn.chatgpt.com/docs/build-skills){:target="_blank" rel="noopener noreferrer"} · [Plugins](https://learn.chatgpt.com/docs/plugins){:target="_blank" rel="noopener noreferrer"}
+- [Anthropic：Building effective agents](https://www.anthropic.com/engineering/building-effective-agents){:target="_blank" rel="noopener noreferrer"}
+- [Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents){:target="_blank" rel="noopener noreferrer"}
+- [Anthropic：Scaling managed agents](https://www.anthropic.com/engineering/managed-agents){:target="_blank" rel="noopener noreferrer"} · [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents){:target="_blank" rel="noopener noreferrer"}
