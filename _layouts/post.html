@@ -4,10 +4,48 @@ layout: default
 <article class="post">
   <a class="back" href="{{ '/' | relative_url }}">← 返回文章列表</a>
   <header class="post-header">
-    <p class="eyebrow">{{ page.category | default: "产品测评" }}</p>
+    <p class="eyebrow">{{ page.category | default: "文章" }}</p>
     <h1>{{ page.title }}</h1>
     <p class="post-meta">{{ page.date | date: "%Y年%m月%d日" }} · {{ page.reading_time | default: "约 5 分钟阅读" }}</p>
   </header>
   <div class="post-content">{{ content }}</div>
-</article>
 
+  <div class="post-relations">
+    {% if page.previous or page.next %}
+    <div class="post-pagination" role="navigation" aria-label="上一篇和下一篇">
+      {% if page.previous %}
+      <a href="{{ page.previous.url | relative_url }}">
+        <span>上一篇</span>
+        <strong>{{ page.previous.title }}</strong>
+      </a>
+      {% else %}
+      <span class="post-pagination-empty" aria-hidden="true"></span>
+      {% endif %}
+      {% if page.next %}
+      <a class="next" href="{{ page.next.url | relative_url }}">
+        <span>下一篇</span>
+        <strong>{{ page.next.title }}</strong>
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if site.related_posts.size > 0 %}
+    <section class="related-posts" aria-labelledby="related-posts-title">
+      <div class="related-heading">
+        <p class="eyebrow">Continue reading</p>
+        <h2 id="related-posts-title">继续阅读</h2>
+      </div>
+      <div class="related-grid">
+        {% for related in site.related_posts limit: 3 %}
+        <a class="related-card" href="{{ related.url | relative_url }}">
+          <span>{{ related.category | default: "文章" }} · {{ related.date | date: "%Y.%m.%d" }}</span>
+          <strong>{{ related.title }}</strong>
+          {% if related.description %}<small>{{ related.description }}</small>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</article>

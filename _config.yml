@@ -1,6 +1,8 @@
 title: A80s · 程序员手记
+tagline: 写代码二十多年，依然对世界好奇
 description: 一位拥有 20 多年经验的程序员，分享经验、感悟、测评与生活观察
 lang: zh-CN
+locale: zh_CN
 timezone: Asia/Shanghai
 url: "https://blog.a80s.com"
 baseurl: ""
@@ -8,5 +10,15 @@ permalink: /articles/:title/
 markdown: kramdown
 theme: null
 google_analytics: G-K00YMYK3FB
+author:
+  name: A80s
+  url: https://blog.a80s.com/about/
+defaults:
+  - scope:
+      path: ""
+    values:
+      image: /assets/share-card.png
 plugins:
   - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
