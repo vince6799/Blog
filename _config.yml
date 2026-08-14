@@ -7,5 +7,6 @@ baseurl: ""
 permalink: /articles/:title/
 markdown: kramdown
 theme: null
+google_analytics: G-K00YMYK3FB
 plugins:
   - jekyll-feed
