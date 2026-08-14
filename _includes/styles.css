@@ -21,3 +21,16 @@ footer a{color:var(--green-dark);font-weight:700;text-underline-offset:3px}
 .related-card strong{font:700 20px/1.4 Georgia,"Songti SC",serif}
 .related-card small{font-size:14px;line-height:1.65}
 @media(max-width:700px){.post-relations{margin-top:54px}.post-pagination{grid-template-columns:1fr}.post-pagination-empty{display:none}.post-pagination>a.next{text-align:left}.related-posts{margin-top:48px}}
+
+
+/* Article sharing */
+.post-share{margin-top:72px;padding:28px 30px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;border:1px solid var(--line);border-radius:16px;background:var(--paper)}
+.post-share h2{margin:6px 0 0;font:700 24px/1.4 Georgia,"Songti SC",serif}
+.share-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.share-button{appearance:none;padding:10px 17px;border:1px solid var(--line);border-radius:99px;background:white;color:var(--ink);font:700 14px/1.4 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;cursor:pointer;transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.share-button:hover{transform:translateY(-1px);border-color:rgba(22,114,74,.5)}
+.share-button:focus-visible{outline:3px solid rgba(22,114,74,.22);outline-offset:2px}
+.share-primary{border-color:var(--green);background:var(--green);color:white}
+.share-primary:hover{background:var(--green-dark)}
+.share-status{grid-column:1/-1;min-height:1.5em;margin:0;color:var(--green-dark);font-size:13px;text-align:right}
+@media(max-width:700px){.post-share{margin-top:54px;padding:24px;grid-template-columns:1fr}.share-actions{justify-content:flex-start}.share-status{text-align:left}}

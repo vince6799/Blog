@@ -10,6 +10,18 @@ layout: default
   </header>
   <div class="post-content">{{ content }}</div>
 
+  <section class="post-share" aria-labelledby="share-title">
+    <div>
+      <p class="eyebrow">Share</p>
+      <h2 id="share-title">觉得有帮助，可以分享给朋友</h2>
+    </div>
+    <div class="share-actions">
+      <button class="share-button share-primary" type="button" data-share hidden>分享本文</button>
+      <button class="share-button" type="button" data-copy-link>复制链接</button>
+    </div>
+    <p class="share-status" role="status" aria-live="polite"></p>
+  </section>
+
   <div class="post-relations">
     {% if page.previous or page.next %}
     <div class="post-pagination" role="navigation" aria-label="上一篇和下一篇">
@@ -49,3 +61,60 @@ layout: default
     {% endif %}
   </div>
 </article>
+
+<script>
+(function () {
+  var shareButton = document.querySelector('[data-share]');
+  var copyButton = document.querySelector('[data-copy-link]');
+  var status = document.querySelector('.share-status');
+  var canonical = document.querySelector('link[rel="canonical"]');
+  var description = document.querySelector('meta[name="description"]');
+  var shareData = {
+    title: document.title,
+    text: description ? description.content : '',
+    url: canonical ? canonical.href : window.location.href
+  };
+
+  function showStatus(message) {
+    status.textContent = message;
+    window.setTimeout(function () {
+      if (status.textContent === message) status.textContent = '';
+    }, 2400);
+  }
+
+  if (navigator.share) {
+    shareButton.hidden = false;
+    shareButton.addEventListener('click', function () {
+      navigator.share(shareData).catch(function (error) {
+        if (error && error.name !== 'AbortError') showStatus('暂时无法调用系统分享');
+      });
+    });
+  }
+
+  copyButton.addEventListener('click', function () {
+    var copy = navigator.clipboard && window.isSecureContext
+      ? navigator.clipboard.writeText(shareData.url)
+      : new Promise(function (resolve, reject) {
+          var field = document.createElement('textarea');
+          field.value = shareData.url;
+          field.setAttribute('readonly', '');
+          field.style.position = 'fixed';
+          field.style.opacity = '0';
+          document.body.appendChild(field);
+          field.select();
+          try {
+            document.execCommand('copy') ? resolve() : reject();
+          } catch (error) {
+            reject(error);
+          }
+          document.body.removeChild(field);
+        });
+
+    copy.then(function () {
+      showStatus('链接已复制');
+    }).catch(function () {
+      showStatus('复制失败，请手动复制浏览器地址');
+    });
+  });
+})();
+</script>
