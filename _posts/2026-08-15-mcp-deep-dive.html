@@ -1,0 +1,428 @@
+---
+layout: post
+title: "MCP 到底在传什么：从一次工具调用到一个可运行的 Server"
+description: "深入拆解 MCP 的协议边界、Host、Client 与 Server 分工、Agent 调用链、传输和版本变化，并用 TypeScript 实现一个可运行的 MCP Server。"
+category: 技术
+reading_time: 约 32 分钟阅读
+permalink: /articles/mcp-deep-dive/
+---
+<style>.mcp-article code{padding:.12em .38em;border-radius:5px;background:#e5e6df;font:90% ui-monospace,SFMono-Regular,Menlo,monospace}.mcp-article pre{position:relative;margin:28px 0;padding:50px 25px 23px;overflow:auto;border-radius:14px;background:#121a16;color:#e7eee9;font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 14px 36px rgba(23,32,28,.14)}.mcp-article pre code{padding:0;background:none;color:inherit}.copy-code{position:absolute;right:12px;top:11px;padding:5px 10px;border:1px solid #435049;border-radius:7px;background:#202a25;color:#dbe7df;font:12px/1.4 system-ui,-apple-system,"PingFang SC",sans-serif;cursor:pointer}.copy-code:hover{border-color:#78a78a}.mcp-article .note{margin:32px 0;padding:22px 25px;border:1px solid #bed2c5;border-radius:14px;background:#e7efe9}.mcp-article .note strong{display:block;margin-bottom:5px;color:#0e5134}.version-note{margin:30px 0;padding:18px 21px;border:1px dashed #9db6a6;border-radius:12px;color:#405049;font-size:14px;background:rgba(255,255,255,.38)}.toc{margin:36px 0 42px;padding:24px 27px;border:1px solid #d7dcd6;border-radius:14px;background:#fffefa}.toc strong{display:block;margin-bottom:10px;font:700 19px Georgia,"Songti SC",serif}.toc ol{margin:0;padding-left:1.3em;columns:2;column-gap:34px}.toc li{margin:.25em 0;break-inside:avoid}.toc a{text-decoration:none;font-size:14px}.diagram{margin:38px 0;padding:26px;border:1px solid #d7dcd6;border-radius:16px;background:#fffefa;box-shadow:0 10px 30px rgba(23,32,28,.04)}.diagram figcaption{margin-bottom:22px;color:#68736d;font-size:13px}.topology{display:grid;grid-template-columns:1fr 54px 1fr 54px 1fr;align-items:center;gap:8px}.box{min-height:130px;padding:18px;border:1px solid #d7dcd6;border-radius:12px;background:white}.box b{display:block;font:700 19px Georgia,"Songti SC",serif}.box span{display:block;margin-top:8px;color:#68736d;font-size:13px;line-height:1.55}.arrow{text-align:center;color:#16724a;font-size:26px}.server-stack{display:grid;gap:7px;margin-top:8px}.server-stack i{padding:5px 7px;border-radius:5px;background:#e7efe9;font-size:12px;font-style:normal}.sequence{display:grid;border-top:1px solid #d7dcd6}.seq-row{display:grid;grid-template-columns:46px 145px 1fr;gap:14px;padding:15px 0;border-bottom:1px solid #d7dcd6;align-items:start}.seq-num{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#16724a;color:white;font-weight:800}.seq-who{font-weight:800}.seq-what{color:#44514b}.seq-what code{font-size:12px}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.mini{padding:20px;border:1px solid #d7dcd6;border-radius:12px;background:white}.mini h4{margin:0 0 8px;font-size:17px}.mini p{margin:0;color:#68736d;font-size:14px;line-height:1.65}.compare{width:100%;border-collapse:collapse;margin:28px 0;background:#fffefa;font-size:14px}.compare th,.compare td{padding:13px 15px;border:1px solid #d7dcd6;text-align:left;vertical-align:top}.compare th{background:#e7efe9}.wire{padding:20px 22px;border-radius:12px;background:#17201c;color:#dbe7df;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}.wire .dim{color:#8ba095}.wire .hi{color:#8dd7ad}.checklist{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:26px 0}.check{padding:18px 20px;border-left:3px solid #16724a;background:rgba(255,255,255,.55)}.check b{display:block}.check span{color:#68736d;font-size:14px}@media(max-width:760px){.topology{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.three,.checklist{grid-template-columns:1fr}.seq-row{grid-template-columns:40px 1fr}.seq-what{grid-column:2}.diagram{padding:20px 17px}.compare{display:block;overflow-x:auto}.toc ol{columns:1}}</style>
+<div class="mcp-article">
+<p>关于 MCP，最常见的解释是“AI 世界的 USB-C”。这个比喻适合做开场，却经不起继续追问：插头两边分别是谁？模型是否直接连接 MCP Server？工具是谁挑的？授权又在哪里发生？</p>
+
+      <p>不把这些问题拆开，最后很容易得到一种错误印象：只要接入 MCP，模型就能自行访问外部系统。真实情况要克制得多。MCP 规定的是消息怎么表达、能力怎样被发现、调用结果如何返回。至于模型要不要调用、用户有没有权限、一次写操作是否需要确认，仍由承载模型的应用负责。</p>
+
+      <p>下面用一个工单系统贯穿全文。我们准备给 AI 应用接入两个能力：查询线上故障，以及读取某条故障的详情。后面再加写操作时，权限问题也会自然浮出来。</p>
+
+      <aside class="version-note"><strong>版本说明：</strong>本文写于 2026 年 8 月，协议部分以当前正式版 <code>2026-07-28</code> 为准。2025 年及更早版本采用 <code>initialize / initialized</code> 握手，交互方式不同；文中会单独标出这段变化。官方 SDK v2 是本文代码对应的稳定版本。</aside>
+
+      <nav class="toc" aria-label="文章目录">
+        <strong>本文目录</strong>
+        <ol>
+          <li><a href="#boundary">协议边界与三个角色</a></li>
+          <li><a href="#primitives">Tools、Resources、Prompts</a></li>
+          <li><a href="#interaction">一次完整调用怎样发生</a></li>
+          <li><a href="#transport">stdio 与 Streamable HTTP</a></li>
+          <li><a href="#versions">新旧协议版本差异</a></li>
+          <li><a href="#develop">开发一个 MCP Server</a></li>
+          <li><a href="#production">从演示走向生产</a></li>
+          <li><a href="#scope">MCP 的能力边界</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="boundary">先把边界钉住：MCP 连接的不是模型和 API</h2>
+
+      <p>MCP 的全称是 Model Context Protocol。按最新规范，它是一套建立在 JSON-RPC 2.0 之上的开放协议，用于 AI 应用与外部服务交换工具、资源和提示模板。这个定义里最重要的不是 “Model”，而是 “Protocol”。</p>
+
+      <p>一套 MCP 连接里有三个角色：</p>
+
+      <ul>
+        <li><strong>Host</strong> 是用户正在使用的 AI 应用，例如桌面客户端、IDE 或 Agent 运行环境。它持有对话，调用模型，管理权限和用户确认。</li>
+        <li><strong>Client</strong> 是 Host 内部的一段协议实现。一个 Client 只连接一个 Server；一个 Host 可以同时管理多个 Client。</li>
+        <li><strong>Server</strong> 暴露某一组外部能力。它可能包装工单 API、数据库、文件系统，也可能只调用本机程序。</li>
+      </ul>
+
+      <figure class="diagram">
+        <figcaption>图 1：MCP 所在的位置。模型与 Server 之间隔着 Host；安全边界也主要落在 Host 和后端系统。</figcaption>
+        <div class="topology">
+          <div class="box"><b>AI Host</b><span>对话、模型调用、Agent 循环、审批、上下文</span></div>
+          <div class="arrow">→</div>
+          <div class="box"><b>MCP Client</b><span>发现能力、编码请求、选择传输、解析结果</span></div>
+          <div class="arrow">→</div>
+          <div class="box"><b>MCP Server</b><div class="server-stack"><i>Tools</i><i>Resources</i><i>Prompts</i></div><span>再去访问工单 API 或数据库</span></div>
+        </div>
+      </figure>
+
+      <p>这里有个经常被省略的事实：<strong>模型通常不直接发送 MCP 报文。</strong>模型看到的是 Host 整理过的工具定义；它返回一次工具调用意图，Host 再通过 MCP Client 把这次意图翻译成 <code>tools/call</code>。Server 也不应默认得到整段对话，它只收到完成当前请求所需的参数和元数据。</p>
+
+      <p>因此，MCP 与 Function Call 并不是竞争方案。Function Call 发生在模型接口这一侧，表达“模型想调用哪个函数”；MCP 发生在应用集成这一侧，负责“应用怎样找到并调用外部提供的能力”。二者经常首尾相接。</p>
+
+      <div class="note"><strong>一句话版本</strong>MCP 把外部能力接到 Host；Host 再决定哪些能力、以什么形式交给模型。Server 不会因为使用了 MCP 就自动变成 Agent。</div>
+
+      <h2 id="primitives">Server 到底提供什么</h2>
+
+      <p>Server 侧最常见的三类原语是 Tools、Resources 和 Prompts。它们不只是三种数据格式，还暗含了不同的控制方式。</p>
+
+      <div class="three">
+        <div class="mini"><h4>Tools</h4><p>可以执行的操作，例如 <code>search_incidents</code>、<code>add_comment</code>。通常由模型根据任务选择，但 Host 可以在执行前拦截和确认。</p></div>
+        <div class="mini"><h4>Resources</h4><p>可读取的内容，以 URI 标识，例如 <code>incident://1842</code>。更像一层标准化的数据读取接口。</p></div>
+        <div class="mini"><h4>Prompts</h4><p>Server 提供的参数化提示模板，通常由用户或产品界面选择。它表达的是一种可复用入口，不是隐藏的系统指令。</p></div>
+      </div>
+
+      <p>拿工单系统来说，搜索适合做 Tool，因为模型需要传入关键词和状态，并根据返回结果继续判断；单条工单详情也可以作为 Resource 暴露，方便客户端按 URI 读取；“生成事故复盘”则可以做成 Prompt，让用户明确选择模板并补充事故编号。</p>
+
+      <p>边界不是由名词决定的，而是由使用方式决定的。同一份工单详情既能作为 Tool 的结果返回，也能成为 Resource。真正要问的是：它是一次带副作用的动作，还是一份可以定位、缓存和重复读取的数据？如果只是为了“把三种原语都用上”而重复暴露接口，客户端只会更难理解。</p>
+
+      <h2 id="interaction">跟完一次调用，交互关系就清楚了</h2>
+
+      <p>假设用户问：“最近和支付超时有关的线上故障有哪些？” Host 已经连接工单 Server。下面这条链路里，只有第二步和第七步需要模型参与；协议通讯、参数校验和实际 API 请求都由普通程序完成。</p>
+
+      <figure class="diagram">
+        <figcaption>图 2：从自然语言到一次真实查询。箭头没有直接从模型指向 MCP Server。</figcaption>
+        <div class="sequence">
+          <div class="seq-row"><span class="seq-num">1</span><span class="seq-who">MCP Client</span><span class="seq-what">向 Server 请求 <code>tools/list</code>，取得工具名、说明和 JSON Schema。</span></div>
+          <div class="seq-row"><span class="seq-num">2</span><span class="seq-who">Host → 模型</span><span class="seq-what">把当前问题和经过筛选的工具定义交给模型。模型返回 <code>search_incidents({query:"支付超时", status:"open"})</code>。</span></div>
+          <div class="seq-row"><span class="seq-num">3</span><span class="seq-who">Host</span><span class="seq-what">检查工具是否允许使用、参数是否合规、是否需要用户确认。模型的决定到这里仍只是一项请求。</span></div>
+          <div class="seq-row"><span class="seq-num">4</span><span class="seq-who">MCP Client</span><span class="seq-what">发送 JSON-RPC <code>tools/call</code>。远程连接走 HTTP，本地进程可以走 stdio。</span></div>
+          <div class="seq-row"><span class="seq-num">5</span><span class="seq-who">MCP Server</span><span class="seq-what">再次校验身份和参数，调用真正的工单 API，将后端错误转换为稳定的工具结果。</span></div>
+          <div class="seq-row"><span class="seq-num">6</span><span class="seq-who">Host</span><span class="seq-what">接收 <code>content</code> 或 <code>structuredContent</code>，记录 trace，并控制返回模型的数据量。</span></div>
+          <div class="seq-row"><span class="seq-num">7</span><span class="seq-who">模型</span><span class="seq-what">依据结果回答，或者提出下一次调用，例如读取其中一条故障详情。</span></div>
+        </div>
+      </figure>
+
+      <p>这也是 MCP 与 Agent 的关系。MCP 给 Agent 增加了可发现的外部能力，却不提供 Agent 的决策循环。循环何时继续、最多调用多少次、失败后是否换工具，由 Host 或外层 Harness 决定。同一个 MCP Server 可以被聊天应用调用，也可以被固定 Workflow 调用，Server 无需知道对面是不是 Agent。</p>
+
+      <h3>线上真正传输的报文</h3>
+
+      <p>省略每个请求都要携带的元数据后，一次工具调用的核心很朴素：</p>
+
+      <div class="wire"><span class="dim">// Client → Server</span><br>{<br>&nbsp;&nbsp;"jsonrpc": "2.0",<br>&nbsp;&nbsp;"id": 12,<br>&nbsp;&nbsp;"method": <span class="hi">"tools/call"</span>,<br>&nbsp;&nbsp;"params": {<br>&nbsp;&nbsp;&nbsp;&nbsp;"name": "search_incidents",<br>&nbsp;&nbsp;&nbsp;&nbsp;"arguments": { "query": "支付超时", "status": "open" }<br>&nbsp;&nbsp;}<br>}<br><br><span class="dim">// Server → Client</span><br>{<br>&nbsp;&nbsp;"jsonrpc": "2.0",<br>&nbsp;&nbsp;"id": 12,<br>&nbsp;&nbsp;"result": {<br>&nbsp;&nbsp;&nbsp;&nbsp;"content": [{ "type": "text", "text": "找到 2 条故障" }],<br>&nbsp;&nbsp;&nbsp;&nbsp;"structuredContent": { "items": [/* ... */] },<br>&nbsp;&nbsp;&nbsp;&nbsp;"isError": false<br>&nbsp;&nbsp;}<br>}</div>
+
+      <p><code>content</code> 适合直接进入对话上下文，<code>structuredContent</code> 适合客户端校验、渲染或继续处理。两者并不冲突。只返回一大段“看起来像 JSON 的文本”虽然能跑，却让客户端失去了可靠解析的机会；对稳定接口，最好同时定义输出 Schema。</p>
+
+      <h2 id="transport">传输层：stdio 与 Streamable HTTP 解决的是部署问题</h2>
+
+      <table class="compare">
+        <thead><tr><th></th><th>stdio</th><th>Streamable HTTP</th></tr></thead>
+        <tbody>
+          <tr><th>Server 在哪里</th><td>通常由 Host 在本机拉起一个子进程</td><td>独立部署的远程服务</td></tr>
+          <tr><th>消息怎么走</th><td>stdin/stdout 上的 JSON-RPC</td><td>向单一 MCP 端点发送 HTTP POST；响应可以是 JSON 或请求范围内的 SSE 流</td></tr>
+          <tr><th>认证</th><td>常从环境变量或本机配置取得凭据</td><td>需要按远程服务设计 OAuth、访问令牌和作用域</td></tr>
+          <tr><th>适合</th><td>个人工具、IDE、本地文件和开发环境</td><td>团队服务、SaaS、多实例部署和统一治理</td></tr>
+          <tr><th>最容易踩的坑</th><td>把日志写入 stdout，污染协议报文</td><td>Origin 校验、令牌受众、跨用户缓存和超时处理做得不完整</td></tr>
+        </tbody>
+      </table>
+
+      <p>stdio 不是“简化版 MCP”。它与 HTTP 承载的是同一类协议消息，只是进程管理和安全条件不同。stdio Server 的 stdout 是协议通道，调试日志必须写到 stderr；一行随手的 <code>console.log</code> 就可能让客户端收到无法解析的 JSON。</p>
+
+      <p>远程 Server 也不是把 stdio 程序套一层 Web 路由就结束了。它面对多用户、并发、网关、认证和数据隔离。最新 Streamable HTTP 要求校验 <code>Origin</code>，本地监听应绑定 <code>127.0.0.1</code>，而不是无条件监听 <code>0.0.0.0</code>。这些要求与模型无关，却决定了服务能否安全上线。</p>
+
+      <h3>远程鉴权应该放在哪里</h3>
+
+      <p>MCP Server 在 OAuth 体系中是 Resource Server：它验证访问令牌，但不应该顺手承担账号登录和令牌签发。下面只展示 HTTP 入口的鉴权落点，<code>verifyAccessToken</code> 应交给成熟的身份系统实现，并严格校验签名、<code>issuer</code>、<code>audience</code>、有效期和 scope。</p>
+
+      <pre><code>npm install @modelcontextprotocol/express @modelcontextprotocol/node express</code></pre>
+
+      <pre><code>import type { OAuthTokenVerifier } from "@modelcontextprotocol/express";
+import {
+  createMcpExpressApp,
+  getOAuthProtectedResourceMetadataUrl,
+  requireBearerAuth
+} from "@modelcontextprotocol/express";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+
+const endpoint = new URL("https://mcp.example.com/mcp");
+const verifier: OAuthTokenVerifier = { verifyAccessToken };
+
+const auth = requireBearerAuth({
+  verifier,
+  requiredScopes: ["incidents:read"],
+  resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(endpoint)
+});
+
+const app = createMcpExpressApp({
+  host: "0.0.0.0",
+  allowedHosts: ["mcp.example.com"],
+  allowedOrigins: ["https://agent.example.com"]
+});
+
+const handler = toNodeHandler(createMcpHandler(createServer));
+app.all("/mcp", auth, (req, res) =&gt; void handler(req, res, req.body));</code></pre>
+
+      <p>这一层验证的是“请求能不能进入 MCP Server”。某个 Tool 是否允许执行，还要在处理函数里检查更细的 scope 和对象权限。入口通过，不等于调用者可以访问所有工单。</p>
+
+      <h2 id="versions">版本变化：为什么旧教程和新规范看起来不像同一种协议</h2>
+
+      <p>本文以 2026-07-28 规范为准。这个版本对协议核心做了较大调整。如果你读过早期文章，熟悉的流程多半是：Client 先发送 <code>initialize</code>，Server 返回版本和能力，Client 再发 <code>initialized</code>；Streamable HTTP 还可能维持 <code>Mcp-Session-Id</code>。</p>
+
+      <p>2026-07-28 删除了这套握手和协议级 Session。每个请求都自带协议版本、Client 信息和能力元数据。Client 如果想事先了解 Server，可以调用 <code>server/discover</code>，但这不是每次业务调用的必经步骤。一个请求因此可以落到负载均衡器后面的任意实例。</p>
+
+      <figure class="diagram">
+        <figcaption>图 3：变化的是协议状态，不是业务状态。</figcaption>
+        <div class="three">
+          <div class="mini"><h4>旧版</h4><p><code>initialize</code> 建立协议上下文，后续请求依赖已经协商好的连接状态。</p></div>
+          <div class="mini"><h4>新版</h4><p>请求自描述。协议版本与 Client 能力随请求携带，<code>server/discover</code> 用于按需发现。</p></div>
+          <div class="mini"><h4>没有消失的东西</h4><p>购物车、浏览器页签、长任务仍需要状态，只是要用显式 ID 或 handle 放进业务数据，而不是藏在连接 Session 里。</p></div>
+        </div>
+      </figure>
+
+      <p>“协议无状态”不等于“应用不能有状态”。假设 Tool 创建了一次数据导出，应返回 <code>job_id</code>；后续查询进度时，Client 把这个 ID 作为参数再次传入。状态归业务系统管理，调用关系也变得可追踪。兼容旧客户端时则应依赖 SDK 的版本协商能力，不要在业务处理函数里到处判断协议年代。</p>
+
+      <h2 id="develop">动手写一个 MCP Server</h2>
+
+      <p>下面实现一个只读的故障查询 Server。代码使用官方 TypeScript Server SDK 的当前接口和 stdio 传输。为了让示例可以独立运行，后端数据暂时放在数组里；换成真实系统时，只需替换 <code>searchIncidents</code>，协议层不用改。</p>
+
+      <h3>1. 建项目</h3>
+
+      <pre><code>mkdir incident-mcp
+cd incident-mcp
+npm init -y
+npm install @modelcontextprotocol/server zod
+npm install -D typescript @types/node
+mkdir src</code></pre>
+
+      <p><code>package.json</code> 至少补上 ESM 类型和构建命令：</p>
+
+      <pre><code>{
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  }
+}</code></pre>
+
+      <h3>2. 注册工具</h3>
+
+      <pre><code>import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { z } from "zod";
+
+type Incident = {
+  id: string;
+  title: string;
+  status: "open" | "resolved";
+  severity: "P1" | "P2" | "P3";
+};
+
+const incidents: Incident[] = [
+  { id: "1842", title: "支付回调持续超时", status: "open", severity: "P1" },
+  { id: "1837", title: "订单页偶发超时", status: "resolved", severity: "P2" }
+];
+
+function createServer() {
+  const server = new McpServer({
+    name: "incident-desk",
+    version: "1.0.0"
+  });
+
+  server.registerTool(
+    "search_incidents",
+    {
+      description: "按关键词和状态查询故障工单。只读取，不修改工单。",
+      inputSchema: z.object({
+        query: z.string().min(1).max(100)
+          .describe("标题关键词，不要传入整段用户问题"),
+        status: z.enum(["open", "resolved", "all"]).default("open"),
+        limit: z.number().int().min(1).max(20).default(10)
+      })
+    },
+    async ({ query, status, limit }) =&gt; {
+      const keyword = query.toLowerCase();
+      const items = incidents
+        .filter(item =&gt; item.title.toLowerCase().includes(keyword))
+        .filter(item =&gt; status === "all" || item.status === status)
+        .slice(0, limit);
+
+      return {
+        content: [{
+          type: "text",
+          text: items.length
+            ? `找到 ${items.length} 条故障：${items.map(x =&gt; `${x.id} ${x.title}`).join("；")}`
+            : "没有找到匹配的故障"
+        }],
+        structuredContent: { items }
+      };
+    }
+  );
+
+  return server;
+}
+
+void serveStdio(createServer);
+console.error("incident-desk MCP server is running");</code></pre>
+
+      <p>这段代码不长，真正值得注意的是接口收口：</p>
+
+      <ul>
+        <li>Server 没有暴露“执行任意工单 API”，而是给出一个语义明确的只读操作。</li>
+        <li><code>status</code> 用枚举，<code>limit</code> 有上限，避免模型制造无限结果集。</li>
+        <li>工具说明明确写出“不修改工单”，这有助于模型选择，但它不是安全边界。后端凭据仍应只有读取权限。</li>
+        <li>返回内容同时照顾模型和程序：自然语言摘要放在 <code>content</code>，原始条目放在 <code>structuredContent</code>。</li>
+      </ul>
+
+      <h3>3. 再补一份 Resource 和一个 Prompt</h3>
+
+      <p>查询是一次动作；工单详情则有稳定 URI，更适合做 Resource。下面的模板让 Client 可以读取任意 <code>incident://{id}</code>。Prompt 只提供复盘提纲，不读取工单，也不会自行调用 Tool。</p>
+
+      <pre><code>// 放在 createServer() 的 return server 之前
+server.registerResource(
+  "incident-detail",
+  new ResourceTemplate("incident://{id}", { list: undefined }),
+  {
+    title: "故障工单详情",
+    description: "按编号读取一条故障工单",
+    mimeType: "application/json"
+  },
+  async (uri, { id }) =&gt; {
+    const incident = incidents.find(item =&gt; item.id === String(id));
+    return {
+      contents: [{
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(incident ?? { error: "incident_not_found" })
+      }]
+    };
+  }
+);
+
+server.registerPrompt(
+  "incident-review",
+  {
+    title: "故障复盘",
+    description: "根据一条故障工单整理复盘提纲",
+    argsSchema: z.object({
+      incidentId: z.string().describe("故障工单编号")
+    })
+  },
+  ({ incidentId }) =&gt; ({
+    messages: [{
+      role: "user",
+      content: {
+        type: "text",
+        text: `请读取 incident://${incidentId}，按时间线、根因、影响、修复和后续行动整理复盘。缺少证据的部分不要猜。`
+      }
+    }]
+  })
+);</code></pre>
+
+      <p><code>list: undefined</code> 表示这个 URI 模板可以读取，但 Server 不枚举全部实例。真实工单可能有几十万条，强行塞进 <code>resources/list</code> 没有意义。Client 已知编号时，直接构造 URI 即可。</p>
+
+      <h3>4. 构建、配置与测试</h3>
+
+      <pre><code>npx tsc
+npx @modelcontextprotocol/inspector node /绝对路径/incident-mcp/build/index.js</code></pre>
+
+      <p>Inspector 可以查看工具列表、填写参数并直接调用。先在这里确认 Schema、空结果、异常和大结果集，再接入真实 Host。客户端配置的本质，是告诉 Host 用什么命令拉起 stdio Server：</p>
+
+      <pre><code>{
+  "mcpServers": {
+    "incident-desk": {
+      "command": "node",
+      "args": ["/绝对路径/incident-mcp/build/index.js"]
+    }
+  }
+}</code></pre>
+
+      <p>配置文件的具体位置由 Host 决定，不属于 MCP 协议。Claude Desktop、IDE 和其他 Agent 产品可以采用不同界面，底下仍然是在创建一个 Client 并连接 Server。</p>
+
+      <h2 id="production">从演示代码到可用服务，工作量主要在协议外</h2>
+
+      <p>把一个 Tool 注册出来很快。决定它是否能长期使用的，反而是传统服务端工程。</p>
+
+      <div class="checklist">
+        <div class="check"><b>工具边界</b><span>按用户意图设计接口，不要把参数繁多的内部 API 原样暴露给模型。</span></div>
+        <div class="check"><b>结果预算</b><span>分页、截断、摘要和 Resource Link 要提前设计，不能把几万行数据直接塞回上下文。</span></div>
+        <div class="check"><b>错误语义</b><span>区分“工具执行失败”和“协议请求不合法”。超时也要说明操作是否可能已经完成。</span></div>
+        <div class="check"><b>幂等性</b><span>创建、付款、发信等写操作要有 idempotency key，不能把模型重试当成一次新请求。</span></div>
+        <div class="check"><b>最小权限</b><span>只读 Tool 使用只读凭据。删除、发布、付款不要靠工具描述里的警告来约束。</span></div>
+        <div class="check"><b>可观察性</b><span>记录 tool、调用者、参数摘要、下游耗时和结果状态，同时清理令牌与敏感字段。</span></div>
+      </div>
+
+      <h3>错误应该让调用方知道下一步还能做什么</h3>
+
+      <p>“Something went wrong” 对 Agent 几乎没有价值。一个可恢复的错误至少要说明类别：参数不合法、权限不足、下游限流、服务暂时不可用，还是对象不存在。是否允许重试、建议等待多久，也应尽量结构化。否则模型往往会换个说法重复调用，表面上在探索，实际只是在撞同一堵墙。</p>
+
+      <p>对写操作尤其要谨慎。HTTP 超时只表示 Client 没拿到结果，不表示下游没有创建成功。没有幂等键和查询接口时，自动重试可能重复创建工单、重复发信，甚至重复付款。</p>
+
+      <h3>工具描述是输入，不是可信代码</h3>
+
+      <p>Host 会把工具名、说明和 Schema 放进模型上下文，因此 Server 返回的描述本身也是外部输入。客户端不能因为它长得像配置就完全信任。连接陌生 Server 等于允许对方影响模型看到的工具说明和资源内容，提示注入由此进入调用链。</p>
+
+      <p>实际部署时至少要分三道关：</p>
+
+      <ol>
+        <li>Host 只连接用户或管理员认可的 Server，并控制哪些工具可见。</li>
+        <li>高影响调用在 Host 侧显示明确的确认界面，不能只展示一个模糊的“允许”。</li>
+        <li>Server 和后端系统按真实身份再次授权。即使 Host 漏拦，低权限令牌也不应完成越权操作。</li>
+      </ol>
+
+      <p>远程 Server 接第三方 API 时，不要把 Client 给 MCP Server 的令牌原样转发给下游。规范明确禁止 token passthrough：给 MCP Server 的 token 与访问第三方 API 的 token 应有不同受众和独立授权，否则容易形成 confused deputy，也很难建立可靠审计。</p>
+
+      <h2 id="scope">MCP 解决了什么，又故意没解决什么</h2>
+
+      <p>MCP 的价值不在于让单次 API 调用变短。只接一个模型、三个内部函数时，直接 Function Call 往往更省事。它真正有用的地方，是让能力提供方和 AI 应用之间形成可复用边界：Server 可以声明自己有什么，Host 可以用同一套协议接入不同来源，Agent 也不必为每个系统学习一套私有连接方式。</p>
+
+      <p>但协议没有替你完成下面这些工作：</p>
+
+      <ul>
+        <li>它不决定模型是否应该调用某个工具。</li>
+        <li>它不提供完整的 Agent loop、计划器、记忆或任务验收。</li>
+        <li>它不理解企业内部“关闭故障”和“解决故障”的业务差别。</li>
+        <li>它不自动把工具变安全，也不替后端做权限、审计和幂等。</li>
+        <li>它不保证不同 Host 会以完全相同的方式展示和审批调用。</li>
+      </ul>
+
+      <p>理解这条边界后，选型会简单许多。如果能力只服务一个应用，普通函数已经稳定，不必为了追赶名词再加一层协议。如果同一组工具需要进入多个 AI 客户端，或者你正在做面向外部开发者的能力服务，MCP 才开始体现复用价值。</p>
+
+      <p>最后回到开头那条工单查询。模型负责从用户问题里判断“需要查故障”；Host 决定它能看到什么工具，并执行授权策略；MCP Client 把调用变成标准请求；Server 把请求落到真实工单系统；后端权限决定它究竟能读什么、改什么。五层责任都在，系统才完整。少画一个箭头不影响演示，少做一道边界检查，迟早会在生产环境补回来。</p>
+
+      <h2>参考资料</h2>
+
+      <ul class="sources">
+        <li><a href="https://modelcontextprotocol.io/specification/2026-07-28" target="_blank" rel="noopener noreferrer">Model Context Protocol Specification 2026-07-28</a></li>
+        <li><a href="https://modelcontextprotocol.io/specification/2026-07-28/architecture" target="_blank" rel="noopener noreferrer">MCP Architecture：Host、Client 与 Server</a></li>
+        <li><a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools" target="_blank" rel="noopener noreferrer">MCP Tools：发现、调用、结果与状态设计</a></li>
+        <li><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http" target="_blank" rel="noopener noreferrer">Streamable HTTP Transport</a></li>
+        <li><a href="https://modelcontextprotocol.io/docs/2026-07-28/develop/build-server" target="_blank" rel="noopener noreferrer">官方教程：Build an MCP Server</a></li>
+        <li><a href="https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices" target="_blank" rel="noopener noreferrer">MCP Security Best Practices</a></li>
+        <li><a href="https://blog.modelcontextprotocol.io/posts/2026-07-28/" target="_blank" rel="noopener noreferrer">2026-07-28 规范版本说明</a></li>
+      </ul>
+</div>
+<script>
+(function () {
+      function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          return navigator.clipboard.writeText(text);
+        }
+        return new Promise(function (resolve, reject) {
+          var field = document.createElement("textarea");
+          field.value = text;
+          field.setAttribute("readonly", "");
+          field.style.position = "fixed";
+          field.style.opacity = "0";
+          document.body.appendChild(field);
+          field.select();
+          try { document.execCommand("copy") ? resolve() : reject(); }
+          catch (error) { reject(error); }
+          document.body.removeChild(field);
+        });
+      }
+
+      document.querySelectorAll("pre").forEach(function (block) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy-code";
+        button.textContent = "复制代码";
+        button.addEventListener("click", function () {
+          var code = block.querySelector("code");
+          copyText(code ? code.innerText : block.innerText).then(function () {
+            button.textContent = "已复制";
+            window.setTimeout(function () { button.textContent = "复制代码"; }, 1600);
+          }).catch(function () {
+            button.textContent = "复制失败";
+          });
+        });
+        block.prepend(button);
+      });
+    })();
+</script>
