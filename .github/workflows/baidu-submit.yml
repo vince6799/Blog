@@ -48,7 +48,7 @@ jobs:
             exit 1
           fi
 
-          response=$(curl --fail --silent --show-error             -H "Content-Type: text/plain"             --data-binary @urls.txt             "https://data.zz.baidu.com/urls?site=https://blog.a80s.com&token=${BAIDU_PUSH_TOKEN}")
+          response=$(curl --fail --silent --show-error             -H "Content-Type: text/plain"             --data-binary @urls.txt             "http://data.zz.baidu.com/urls?site=https://blog.a80s.com&token=${BAIDU_PUSH_TOKEN}")
 
           echo "${response}" | jq .
 
