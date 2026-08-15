@@ -1,0 +1,60 @@
+name: Submit URLs to Baidu
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 2 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/baidu-submit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Fetch public URLs from sitemap
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error             --retry 3             --retry-delay 5             "https://blog.a80s.com/sitemap.xml"             -o sitemap.xml
+
+          grep -oE '<loc>[^<]+' sitemap.xml             | sed 's#<loc>##'             | grep -E '^https://blog\.a80s\.com(/$|/about/$|/articles/)'             | grep -v '/articles/boostnet-review/'             | sort -u             > urls.txt
+
+          if [ ! -s urls.txt ]; then
+            echo "No eligible URLs found in sitemap."
+            exit 1
+          fi
+
+          echo "Submitting $(wc -l < urls.txt) URLs:"
+          sed 's/^/  - /' urls.txt
+
+      - name: Submit URLs to Baidu
+        shell: bash
+        env:
+          BAIDU_PUSH_TOKEN: ${{ secrets.BAIDU_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BAIDU_PUSH_TOKEN}" ]; then
+            echo "BAIDU_PUSH_TOKEN is not configured."
+            exit 1
+          fi
+
+          response=$(curl --fail --silent --show-error             -H "Content-Type: text/plain"             --data-binary @urls.txt             "https://data.zz.baidu.com/urls?site=https://blog.a80s.com&token=${BAIDU_PUSH_TOKEN}")
+
+          echo "${response}" | jq .
+
+          if echo "${response}" | jq -e 'has("error")' >/dev/null; then
+            echo "Baidu rejected the submission."
+            exit 1
+          fi
+
+          echo "${response}" | jq -e 'has("success")' >/dev/null
