@@ -25,12 +25,13 @@ title: 首页
   <div><span>03</span><h3>测评</h3><p>基于实际使用分享产品与工具，既写优点，也坦诚说明限制。</p></div>
 </section>
 
+{% assign visible_posts = site.posts | where_exp: "post", "post.hidden != true" %}
 <section class="articles">
   <div class="section-heading">
     <h2>最近写下</h2>
-    <span>{{ site.posts | size }} 篇</span>
+    <span>{{ visible_posts | size }} 篇</span>
   </div>
-  {% for post in site.posts %}
+  {% for post in visible_posts %}
   <article class="card">
     <div>
       <p class="eyebrow">{{ post.category | default: "产品测评" }}</p>
