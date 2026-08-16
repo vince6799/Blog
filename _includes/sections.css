@@ -16,15 +16,15 @@
 .post-content :not(pre)>code,.page :not(pre)>code{padding:.16em .42em;border:1px solid rgba(22,114,74,.16);border-radius:5px;background:rgba(255,255,255,.72);color:var(--green-dark);font:600 .88em/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;overflow-wrap:anywhere}
 .post-content pre,.page pre{margin:1.65em 0;padding:21px 24px;max-width:100%;overflow-x:auto;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#15231c;color:#e7eee9;box-shadow:0 12px 30px rgba(23,32,28,.12);font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;tab-size:2;-webkit-overflow-scrolling:touch}
 .post-content pre code,.page pre code{display:block;min-width:max-content;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;white-space:pre;overflow-wrap:normal}
-.post-content .highlighter-rouge,.page .highlighter-rouge{position:relative;margin:1.65em 0;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#15231c;box-shadow:0 12px 30px rgba(23,32,28,.12)}
-.post-content .highlighter-rouge:before,.page .highlighter-rouge:before{content:"CODE";display:block;padding:8px 17px;border-bottom:1px solid rgba(255,255,255,.08);background:#1c3026;color:#90aa9a;font:700 10px/1.4 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;letter-spacing:.12em}
-.post-content .language-text.highlighter-rouge:before,.page .language-text.highlighter-rouge:before{content:"TEXT"}
-.post-content .language-bash.highlighter-rouge:before,.page .language-bash.highlighter-rouge:before{content:"SHELL"}
-.post-content .language-yaml.highlighter-rouge:before,.page .language-yaml.highlighter-rouge:before{content:"YAML"}
-.post-content .language-html.highlighter-rouge:before,.page .language-html.highlighter-rouge:before{content:"HTML"}
-.post-content .language-liquid.highlighter-rouge:before,.page .language-liquid.highlighter-rouge:before{content:"LIQUID"}
-.post-content .highlighter-rouge .highlight,.page .highlighter-rouge .highlight{margin:0;background:transparent}
-.post-content .highlighter-rouge pre,.page .highlighter-rouge pre{margin:0;border:0;border-radius:0;box-shadow:none}
+.post-content div.highlighter-rouge,.page div.highlighter-rouge{position:relative;margin:1.65em 0;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#15231c;box-shadow:0 12px 30px rgba(23,32,28,.12)}
+.post-content div.highlighter-rouge:before,.page div.highlighter-rouge:before{content:"CODE";display:block;padding:8px 17px;border-bottom:1px solid rgba(255,255,255,.08);background:#1c3026;color:#90aa9a;font:700 10px/1.4 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;letter-spacing:.12em}
+.post-content div.language-text.highlighter-rouge:before,.page div.language-text.highlighter-rouge:before{content:"TEXT"}
+.post-content div.language-bash.highlighter-rouge:before,.page div.language-bash.highlighter-rouge:before{content:"SHELL"}
+.post-content div.language-yaml.highlighter-rouge:before,.page div.language-yaml.highlighter-rouge:before{content:"YAML"}
+.post-content div.language-html.highlighter-rouge:before,.page div.language-html.highlighter-rouge:before{content:"HTML"}
+.post-content div.language-liquid.highlighter-rouge:before,.page div.language-liquid.highlighter-rouge:before{content:"LIQUID"}
+.post-content div.highlighter-rouge .highlight,.page div.highlighter-rouge .highlight{margin:0;background:transparent}
+.post-content div.highlighter-rouge pre,.page div.highlighter-rouge pre{margin:0;border:0;border-radius:0;box-shadow:none}
 .highlight .c,.highlight .c1,.highlight .cm,.highlight .cp,.highlight .cs{color:#8fa397;font-style:italic}
 .highlight .k,.highlight .kc,.highlight .kd,.highlight .kn,.highlight .kp,.highlight .kr,.highlight .kt{color:#f1c875;font-weight:700}
 .highlight .s,.highlight .s1,.highlight .s2,.highlight .sb,.highlight .sc,.highlight .sd,.highlight .se,.highlight .sh,.highlight .si,.highlight .sx{color:#a9deb8}
@@ -34,6 +34,6 @@
 .post-content pre::-webkit-scrollbar,.page pre::-webkit-scrollbar{height:10px}
 .post-content pre::-webkit-scrollbar-track,.page pre::-webkit-scrollbar-track{background:#15231c}
 .post-content pre::-webkit-scrollbar-thumb,.page pre::-webkit-scrollbar-thumb{border:3px solid #15231c;border-radius:10px;background:#496356}
-@media(max-width:700px){.post-content pre,.page pre{padding:17px 18px;border-radius:10px;font-size:13px}.post-content .highlighter-rouge,.page .highlighter-rouge{margin:1.45em -4px;border-radius:10px}.post-content .highlighter-rouge pre,.page .highlighter-rouge pre{padding:17px 18px}.post-content .highlighter-rouge:before,.page .highlighter-rouge:before{padding:7px 14px}}
+@media(max-width:700px){.post-content pre,.page pre{padding:17px 18px;border-radius:10px;font-size:13px}.post-content div.highlighter-rouge,.page div.highlighter-rouge{margin:1.45em -4px;border-radius:10px}.post-content div.highlighter-rouge pre,.page div.highlighter-rouge pre{padding:17px 18px}.post-content div.highlighter-rouge:before,.page div.highlighter-rouge:before{padding:7px 14px}}
 
 @media(max-width:700px){.intro-grid{margin-bottom:54px;padding:46px 20px;grid-template-columns:1fr;gap:28px}.topics{padding:0 20px;margin-bottom:80px;grid-template-columns:1fr}.topics>div{min-height:190px}.topics h3{margin-top:28px}}
