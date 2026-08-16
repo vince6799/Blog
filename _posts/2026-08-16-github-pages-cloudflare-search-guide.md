@@ -28,7 +28,8 @@ reading_time: 约 27 分钟阅读
 - [隐藏暂不公开的文章](#hidden-content)
 - [发布后的检查顺序](#post-publish-checks)
 
-## 先把边界想清楚 {:#scope}
+## 先把边界想清楚
+{: #scope}
 
 本站采用的组合很简单：
 
@@ -43,7 +44,8 @@ reading_time: 约 27 分钟阅读
 
 先承认这些限制，后面的选型会省事很多。
 
-## 建仓库时，先别急着挑主题 {:#repository}
+## 建仓库时，先别急着挑主题
+{: #repository}
 
 仓库名可以任意取。本站使用的是：
 
@@ -112,7 +114,8 @@ https://blog.a80s.com/articles/mcp-deep-dive/
 
 域名切换完成以后，URL 中不再需要 `/Blog`。原因很直接：独立域名已经成为站点入口，不再经过原来的项目路径。
 
-## GitHub Pages 的发布源 {:#pages}
+## GitHub Pages 的发布源
+{: #pages}
 
 进入仓库：
 
@@ -134,7 +137,8 @@ Folder: /(root)
 
 修改 `_config.yml` 不会让一个灰色的 Save 按钮突然可用。发布源和 Jekyll 配置是两层事情。
 
-## 给项目地址换上独立域名 {:#custom-domain}
+## 给项目地址换上独立域名
+{: #custom-domain}
 
 GitHub Pages 设置中的 Custom domain 填写：
 
@@ -160,7 +164,8 @@ DNS 中则创建：
 
 第一次绑定域名时，GitHub 需要为它签发 HTTPS 证书。这个过程可能只要几分钟，也可能持续数小时；证书准备好之前，`Enforce HTTPS` 往往不可选。此时不要反复删除 `CNAME`，也不要在 Cloudflare 中用额外的重定向规则强行补 HTTPS。后文会提到，Cloudflare 设为 `Flexible` 才是常见的循环重定向来源。
 
-## 把远程仓库检出到现有目录 {:#local-checkout}
+## 把远程仓库检出到现有目录
+{: #local-checkout}
 
 新目录最省事：
 
@@ -191,7 +196,8 @@ macOS 还会自动生成 `.DS_Store`。它不应该进入版本库：
 
 如果预览文件统一放在 `outputs/`，又不准备发布，也可以把这个目录加入 `.gitignore`。
 
-## Cloudflare 接管 DNS 以后，先从灰云开始 {:#cloudflare}
+## Cloudflare 接管 DNS 以后，先从灰云开始
+{: #cloudflare}
 
 在 Cloudflare 中选择 Add a domain，输入 `a80s.com` 并选择套餐。Cloudflare 会尝试扫描现有记录，但扫描结果不能直接当作迁移清单，仍要和原 DNS 控制台逐条核对。网站的 CNAME 很显眼，容易被忽略的反而是邮箱所需的 MX、SPF、DKIM，以及各类 TXT 验证记录。
 
@@ -239,7 +245,8 @@ Full (strict)
 
 DNSSEC 也值得开启，但顺序不能反。若原 DNS 服务商已经配置过 DNSSEC，切换 Nameserver 前要先处理旧的 DS 记录；等 Cloudflare 成为权威 DNS 后，再按 Cloudflare 给出的参数在域名注册商处添加新的 DS。旧 DS 与新 DNS 对不上时，结果不是“安全性降低”，而是整个域名解析失败。
 
-## Cloudflare 能做按地区限制，但不是内容保险箱 {:#regional-access}
+## Cloudflare 能做按地区限制，但不是内容保险箱
+{: #regional-access}
 
 GitHub Pages 本身无法根据访客 IP 返回不同内容。若确实需要限制某个路径在中国大陆的访问，必须让 `blog` 记录处于橙云状态，再使用 Cloudflare WAF 或 Worker。
 
@@ -254,7 +261,8 @@ WAF 规则可以写成：
 
 这只能限制博客入口。仓库是公开的，Markdown 源文件依然可能从 GitHub 被看到；IP 国家识别也存在误差，代理用户显示的是出口 IP。地区规则适合控制访问体验，不应被当作合规审查或保密措施的替代品。
 
-## 搜索引擎需要的基础文件 {:#search-basics}
+## 搜索引擎需要的基础文件
+{: #search-basics}
 
 一个博客至少应让搜索引擎找到三样东西：规范的页面元数据、`robots.txt` 和 Sitemap。本站使用三个 GitHub Pages 支持的 Jekyll 插件：
 
@@ -309,7 +317,8 @@ defaults:
 
 Google Analytics 的 Measurement ID 可以写进配置，再由布局加载 `gtag.js`。它解决的是访问统计，不会自动替你完成 Google 搜索提交。Analytics 和 Search Console 是两套产品，这一点很容易混在一起。
 
-## 百度：验证、Sitemap 与 API 推送 {:#baidu}
+## 百度：验证、Sitemap 与 API 推送
+{: #baidu}
 
 在百度搜索资源平台添加：
 
@@ -409,7 +418,8 @@ http://data.zz.baidu.com/urls
 
 改回官方端点后，工作流即可正常返回 `success` 和剩余额度。
 
-## Google：Search Console 与 Analytics 不是一回事 {:#google}
+## Google：Search Console 与 Analytics 不是一回事
+{: #google}
 
 Google 的站点提交入口是 Search Console。使用 Cloudflare DNS 时，推荐添加 Domain property：
 
@@ -441,7 +451,8 @@ https://blog.a80s.com/sitemap.xml
 
 首页和重要文章还可以使用“网址检查”请求编入索引。这个按钮适合少量重要页面，不适合每次发布后机械地提交整站。Sitemap 也只是发现提示，不是收录承诺；新站从抓取、质量判断到展示，本来就需要时间。
 
-## 访问统计：先确定自己想知道什么 {:#analytics}
+## 访问统计：先确定自己想知道什么
+{: #analytics}
 
 搜索平台回答“页面有没有被搜索引擎发现”，访问统计回答的是另一组问题：今天来了多少人、读了哪些文章、从哪里进入、停留了多久。两套数据偶尔能互相印证，却不能相互替代。
 
@@ -520,7 +531,8 @@ GitHub 仓库的 **Insights → Traffic** 也会显示访问者、热门内容�
 
 统计工具会把访问信息发送给第三方，或保存到自己的服务端。启用前应弄清楚它实际采集哪些字段、保存多久、是否使用 Cookie，以及读者所在地区对隐私告知和同意的要求。所谓“无 Cookie”或“隐私友好”可以减少工作量，但不等于在任何地区、任何配置下都自动合规。
 
-## 有些文章不想出现在列表或搜索中 {:#hidden-content}
+## 有些文章不想出现在列表或搜索中
+{: #hidden-content}
 
 “不在首页显示”“不出现在 Sitemap”“不让某个搜索引擎抓取”是三件不同的事。
 
@@ -560,7 +572,8 @@ Google 支持 `noindex`。如果页面已经能被 Google 访问，又不希望�
 
 不要一边用 `robots.txt` 禁止 Googlebot 抓取，一边指望 Google 读取页面里的 `noindex`；爬虫进不了页面，自然看不到这条指令。
 
-## 发布以后，按结果检查，不按按钮猜测 {:#post-publish-checks}
+## 发布以后，按结果检查，不按按钮猜测
+{: #post-publish-checks}
 
 一次正常发布的流程可以很短：
 
