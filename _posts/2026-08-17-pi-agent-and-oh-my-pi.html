@@ -1,0 +1,253 @@
+---
+layout: post
+title: "Pi Agent 与 Oh My Pi：两条不同的 Coding Agent 路线"
+description: "从 Agent loop、工具执行和上下文管理讲清 Pi Agent，再看 Oh My Pi 如何沿着另一条路线加入 LSP、调试器、子 Agent、浏览器与长期记忆。"
+category: 技术
+reading_time: 约 27 分钟阅读
+permalink: /articles/pi-agent-and-oh-my-pi/
+published: true
+---
+<style>
+.pi-article .article-note{margin:30px 0;padding:18px 21px;border:1px dashed #9db6a6;border-radius:12px;background:rgba(255,255,255,.38);color:#405049;font-size:14px}.pi-article .toc{margin:36px 0 44px;padding:24px 27px;border:1px solid #d7dcd6;border-radius:14px;background:#fffefa}.pi-article .toc strong{display:block;margin-bottom:10px;font:700 19px Georgia,"Songti SC",serif}.pi-article .toc ol{margin:0;padding-left:1.3em;columns:2;column-gap:34px}.pi-article .toc li{margin:.25em 0;break-inside:avoid}.pi-article .toc a{text-decoration:none;font-size:14px}.pi-article .diagram{margin:38px 0;padding:26px;border:1px solid #d7dcd6;border-radius:16px;background:#fffefa;box-shadow:0 10px 30px rgba(23,32,28,.04)}.pi-article .diagram figcaption{margin-bottom:22px;color:#68736d;font-size:13px}.agent-loop{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;align-items:stretch}.loop-step{position:relative;padding:15px 12px;border:1px solid #d7dcd6;border-radius:10px;background:white;text-align:center}.loop-step:not(:last-child):after{content:"→";position:absolute;right:-10px;top:50%;z-index:2;transform:translateY(-50%);color:#16724a;font-weight:800}.loop-step b{display:block;color:#0e5134;font-size:13px}.loop-step span{display:block;margin-top:6px;color:#68736d;font-size:12px;line-height:1.5}.fork{display:grid;grid-template-columns:1fr 54px 1fr 54px 1fr;gap:10px;align-items:center}.fork-card{min-height:155px;padding:20px;border:1px solid #d7dcd6;border-radius:12px;background:white}.fork-card b{display:block;font:700 19px Georgia,"Songti SC",serif}.fork-card p{margin:9px 0 0;color:#68736d;font-size:13px;line-height:1.6}.fork-arrow{text-align:center;color:#16724a;font-size:25px}.fork-arrow.branch{font-size:31px}.tool-path{display:grid;border-top:1px solid #d7dcd6}.tool-row{display:grid;grid-template-columns:40px 150px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid #d7dcd6;align-items:start}.tool-num{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#16724a;color:white;font-size:13px;font-weight:800}.tool-who{font-weight:800}.tool-what{color:#44514b}.compare{width:100%;margin:30px 0;border-collapse:collapse;background:#fffefa;font-size:14px}.compare th,.compare td{padding:13px 15px;border:1px solid #d7dcd6;text-align:left;vertical-align:top}.compare th{background:#e7efe9}.scenario{margin:30px 0;padding:24px 26px;border-left:4px solid #16724a;border-radius:0 12px 12px 0;background:rgba(255,255,255,.55)}.scenario h3{margin:0 0 9px}.scenario p:last-child{margin-bottom:0}.terminal-caption{margin:26px 0 -18px;color:#68736d;font-size:13px}.decision{margin:28px 0;padding:24px;border:1px solid #bed2c5;border-radius:14px;background:#e7efe9;color:#213129;font:14px/1.85 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap}.pi-article .sources li{margin:.7em 0}@media(max-width:760px){.pi-article .toc ol{columns:1}.agent-loop{grid-template-columns:1fr 1fr}.loop-step:not(:last-child):after{display:none}.fork{grid-template-columns:1fr}.fork-arrow{transform:rotate(90deg)}.tool-row{grid-template-columns:38px 1fr}.tool-what{grid-column:2}.compare{display:block;overflow-x:auto}.pi-article .diagram{padding:20px 17px}.decision{padding:19px 17px;font-size:12px}}
+</style>
+
+<div class="pi-article">
+  <p>把 Pi Agent 说成底层引擎、把 Oh My Pi 说成装在上面的插件生态，这个说法很顺，却不准确。Oh My Pi 不是给 Pi 换主题、装插件的配置包，而是从 Pi 分叉出来的另一套 Coding Agent。它保留了 Pi 的骨架，随后在工具、代码理解、并行执行和交互层上走得很远。今天安装 <code>pi</code> 或 <code>omp</code>，得到的是两个可以独立运行的程序。</p>
+
+  <p>关系一旦说错，后面的“组合优势”就会变成一套不存在的安装方式。两个项目有意思的地方，其实是它们面对同一个问题，作出了几乎相反的产品选择。</p>
+
+  <p>大模型只负责根据输入生成下一段输出。要让它修改一个仓库，还需要有人替它保存会话、挑选上下文、描述工具、执行命令、把结果送回模型，并判断什么时候该停。这一整套运行环境通常叫作 Agent harness。模型决定上限，harness 决定它每天用起来究竟像工具，还是像事故源。</p>
+
+  <aside class="article-note"><strong>版本说明：</strong>本文核对于 2026 年 8 月。Pi 已在 2026 年 5 月<a href="https://pi.dev/news/2026/5/7/pi-has-a-new-home" target="_blank" rel="noopener noreferrer">迁至 Earendil Works</a>，新的 npm 包使用 <code>@earendil-works</code> 命名空间；很多旧文章仍写作 <code>@mariozechner/pi-*</code>。Oh My Pi 迭代很快，内置工具数量和配置项可能在文章发布后继续变化。</aside>
+
+  <nav class="toc" aria-label="文章目录">
+    <strong>本文目录</strong>
+    <ol>
+      <li><a href="#pi-is">Pi Agent 到底指什么</a></li>
+      <li><a href="#loop">一次 Agent 循环</a></li>
+      <li><a href="#minimal">Pi 为什么保持克制</a></li>
+      <li><a href="#omp-is">Oh My Pi 是什么</a></li>
+      <li><a href="#omp-adds">OMP 加了哪些东西</a></li>
+      <li><a href="#relationship">二者怎样配合</a></li>
+      <li><a href="#scenarios">三个实际场景</a></li>
+      <li><a href="#choice">应该选哪一个</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="pi-is">Pi Agent 到底指什么</h2>
+
+  <p>Pi 最初由 Mario Zechner 开发，现在的正式名称是 <a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer"><em>Pi Agent Harness</em></a>。仓库里的代码大致分成三层：</p>
+
+  <ul>
+    <li><code>pi-ai</code> 统一不同模型供应商的流式接口、消息格式和工具调用。</li>
+    <li><code>pi-agent-core</code> 实现有状态的 Agent 循环、工具执行和事件流。</li>
+    <li><code>pi-coding-agent</code> 把前两层装进终端，补上会话、上下文压缩、文件工具、TUI 以及 SDK、RPC 等接入方式。</li>
+  </ul>
+
+  <p>所以“Pi Agent”有时指底层的 <code>pi-agent-core</code>，更多时候指终端里运行的 <code>pi</code> Coding Agent。讨论功能前最好先问一句说的是哪一层。一个应用可以只引用 core 自己做界面，也可以直接启动完整的 <code>pi</code>。</p>
+
+  <p>Pi 的默认工具并不花哨：<code>read</code>、<code>write</code>、<code>edit</code> 和 <code>bash</code>。仓库还提供 <code>grep</code>、<code>find</code>、<code>ls</code> 等工具，并允许用启动参数精确启停。它的赌注是，现代代码模型已经很熟悉文件和 shell，不必为每种动作都创造一套新的抽象。</p>
+
+  <h2 id="loop">先跟一遍循环，再谈“自主”</h2>
+
+  <p>用户输入“找出订单测试偶发失败的原因并修复”之后，Pi 不会先调用一个名为“任务拆解”的神秘模块。Agent core 把系统提示、历史消息、项目说明和工具定义交给模型。模型可能先要求读取测试文件；Pi 执行 <code>read</code>，把结果记成一条 <code>toolResult</code>，随后再次调用模型。只要模型继续提出工具调用，这个循环就继续。</p>
+
+  <figure class="diagram">
+    <figcaption>图 1：Pi Agent core 的基本循环。所谓“自主”，主要发生在模型每次看完结果后选择下一步。</figcaption>
+    <div class="agent-loop">
+      <div class="loop-step"><b>输入</b><span>目标、历史、项目规则</span></div>
+      <div class="loop-step"><b>整理上下文</b><span>裁剪、转换消息</span></div>
+      <div class="loop-step"><b>调用模型</b><span>文字或工具请求</span></div>
+      <div class="loop-step"><b>执行工具</b><span>读文件、编辑、bash</span></div>
+      <div class="loop-step"><b>写回结果</b><span>形成 toolResult</span></div>
+      <div class="loop-step"><b>继续或结束</b><span>由下一次模型输出决定</span></div>
+    </div>
+  </figure>
+
+  <p>麻烦都藏在循环的边角。工具参数要校验；并行工具的结果要按可预测的顺序写回；UI 需要在模型流式输出、工具开始和工具结束时收到事件；上下文快满时还要压缩历史。Pi 把这些事收进 core，“Agent”在这里没有额外的任务管理含义。</p>
+
+  <p>Pi 的会话可以保存、恢复和分支，长对话也会做 compaction。但会话历史和长期记忆不是一回事。前者解决“这次工作做到哪了”，后者解决“下个月的新会话还应记得什么”。原版 Pi 没有默认附送一套会自动积累用户事实的长期记忆库，也没有一个固定的“自省模块”。你可以用 extension 或 skill 加入这些行为，但不该把扩展能力倒写成核心特性。</p>
+
+  <h2 id="minimal">轻量是一种产品取舍</h2>
+
+  <p>Pi 最有辨识度的地方，是它在<a href="https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#philosophy" target="_blank" rel="noopener noreferrer">项目理念</a>里公开列出了一批“不做”的功能：不内置 MCP，不内置 sub-agent，不内置 plan mode，也不弹出统一的权限确认框。需要 MCP 可以装扩展；需要多个 Agent 可以启动多个 Pi 进程或选择社区包；需要强隔离则把整个进程放进容器或沙箱。</p>
+
+  <p>Pi 没有否定这些能力，只是不替用户决定实现方式。一个团队习惯用 tmux 观察后台任务，另一个团队要求所有命令经过策略引擎，第三个团队只允许在临时容器里写文件。三套需求硬塞进同一个默认实现，往往谁都不满意。</p>
+
+  <p>可扩展性由四种资源承担：</p>
+
+  <ul>
+    <li><strong>Prompt template</strong> 保存可重复调用的提示文本；</li>
+    <li><strong>Skill</strong> 保存某类任务的做法和按需加载的说明；</li>
+    <li><strong>Extension</strong> 是 TypeScript 模块，可以注册工具、命令、快捷键、事件处理和界面组件；</li>
+    <li><strong>Pi package</strong> 把 extension、skill、prompt 和主题打包，通过 npm 或 Git 分发。</li>
+  </ul>
+
+  <p>这种设计对喜欢自己搭工作台的人很有吸引力，也有明确代价。Pi 官方文档直接提醒：进程默认继承启动用户的文件、网络、进程和凭据权限；第三方 package 也能执行任意代码。扩展性不是安全边界。安装一个看起来无害的主题包之前，仍然要看它实际包含了什么。</p>
+
+  <h3>当前的安装方式</h3>
+
+  <pre><code>npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi
+/login</code></pre>
+
+  <p>旧的 <code>@mariozechner/pi-coding-agent</code> 包没有被删除，但已经停止在旧命名空间继续发布。新安装应使用上面的 Earendil Works 包名。</p>
+
+  <h2 id="omp-is">先别把 Oh My Pi 当成配置包</h2>
+
+  <p>Oh My Pi 这个名字自然会让人想到 Oh My Zsh：装完就有一套整理好的默认配置和插件。只看使用感受，这个联想不算离谱；从工程关系看，它会造成误会。</p>
+
+  <p><a href="https://github.com/can1357/oh-my-pi" target="_blank" rel="noopener noreferrer">Oh My Pi</a>（命令是 <code>omp</code>）由 Can Bölük 基于 Pi 创建，项目 README 写得很直接：<strong>fork of Pi</strong>。它从 Pi 的代码基础出发，独立修改并发布自己的包。如今差异已经深入 agent core、coding agent、TUI 和原生运行时，早已超出“挂几项插件”的范围。</p>
+
+  <figure class="diagram">
+    <figcaption>图 2：两条代码分支分别演进，运行时没有上下层关系。</figcaption>
+    <div class="fork">
+      <div class="fork-card"><b>共同起点：Pi</b><p>模型适配、Agent loop、会话、终端界面和扩展接口构成最初骨架。</p></div>
+      <div class="fork-arrow branch">↗</div>
+      <div class="fork-card"><b>Pi</b><p>继续保持可塑的最小核心。许多能力由用户选择扩展或外部工具。</p></div>
+      <div class="fork-arrow">／</div>
+      <div class="fork-card"><b>Oh My Pi</b><p>把代码智能、调试、搜索、浏览器、子 Agent 和原生工具做成完整默认工作台。</p></div>
+    </div>
+  </figure>
+
+  <p>“先安装 Pi，再安装 Oh My Pi 增强包”走不通。你通常要在 <code>pi</code> 和 <code>omp</code> 之间选一个主程序。二者的扩展思想和部分接口有血缘关系，但包名、内部实现和发布节奏已经分开。某个 Pi package 能否装进 OMP，需要逐项确认。</p>
+
+  <h3>OMP 的安装入口</h3>
+
+  <pre><code># macOS / Linux 安装器
+curl -fsSL https://omp.sh/install | sh
+
+# 或使用 Bun
+bun install -g @oh-my-pi/pi-coding-agent
+
+omp
+/login</code></pre>
+
+  <h2 id="omp-adds">Oh My Pi 把精力花在了哪里</h2>
+
+  <p>Pi 交付一张可靠的工作台，OMP 则把 IDE、调试台和工具车一起推进来。它把主要能力直接放进默认发行版，花力气缩短“模型想做一件事”到“机器可靠地做完”之间的距离。</p>
+
+  <h3>编辑代码：Hashline 处理的是定位问题</h3>
+
+  <p>常见的字符串替换工具依赖模型完整复述旧文本。文件稍有变化、缩进少一个空格，替换就失败；模型接着重读、重试，Token 和时间一起浪费。OMP 的 Hashline 编辑格式给文件内容生成锚点，模型引用锚点描述修改。锚点过期时，工具直接拒绝补丁，避免改错位置。</p>
+
+  <p>OMP README 给出了不同模型在自家编辑基准上的提升数据。看这些数字要留一点余地：项目方基准可以证明团队在认真测编辑协议，却不能保证每个仓库都得到同样的涨幅。Hashline 更有价值的变化，是把“锚点已失效”变成一种可检测的失败。</p>
+
+  <p>可检测不等于没有代价。设想一个改动频繁的 monorepo：Agent 读完文件取得锚点，另一个进程随即运行代码生成器，或者同事的同步任务改写了同一文件。第一次拒绝补丁很正常，重新读取再算一次就好。连续两三次都撞上 stale anchor，继续自动重试通常只会烧掉上下文和 Token。这时该停下来查谁在写文件，而不是把重试次数调到十次。</p>
+
+  <p class="terminal-caption">下面是这条失败路径的终端示意，用来说明机制，并非实际会话录屏：</p>
+
+  <pre><code>you  修复 packages/api/src/router.ts 的竞态条件
+
+omp  read router.ts                   # 得到带 hash 的行锚点
+omp  edit 84:af31 ...                 # rejected: anchor is stale
+omp  read router.ts                   # 文件刚被 codegen 改写
+omp  edit 87:922c ...                 # rejected: anchor is stale
+
+you  先停。检查 watch/codegen 进程，不要继续重试。</code></pre>
+
+  <h3>代码理解：把 IDE 已知的信息交给模型</h3>
+
+  <p>只靠文本搜索可以找到变量名，却不知道它究竟引用哪个符号。OMP 把 LSP 接到工具层，模型可以请求定义、引用、诊断、重命名和 code action。写入文件后，语言服务器的错误可以立刻回到 Agent 循环。碰到运行时问题，还可以通过 DAP 查看线程、堆栈和变量，少做几轮靠日志猜原因的尝试。</p>
+
+  <p>LSP 也有自己的脾气。索引尚未完成时，查引用可能漏结果；生成代码、宏和高度动态的调用，语言服务器本来就未必看得全；刚写完文件立刻取 diagnostics，有时读到的还是上一版。Agent 需要识别“没有诊断”和“代码正确”之间的差距，最终判断仍应落到编译和测试上。</p>
+
+  <h3>执行环境：shell 之外还有可回调工具的代码单元</h3>
+
+  <p><code>eval</code> 提供持久的 Python 和 JavaScript 运行环境。单元格里的程序还能重新调用 Agent 已有的 <code>read</code>、<code>search</code>、<code>task</code> 等工具。一段分析代码可以自行读取文件、清洗表格、生成图表，大块中间数据不用反复塞回模型上下文。</p>
+
+  <h3>子 Agent 怎么落地</h3>
+
+  <p>OMP 把 sub-agent 做成一等工具。主 Agent 可以把互不依赖的调查任务并发交给多个工作单元，为它们分配隔离工作区，并用结构化结果收回结论。Agent Hub 用来观察、干预、终止或恢复这些任务。另一个 advisor 角色则可以用独立模型旁观主 Agent 的每一步，在发现问题时插入意见。</p>
+
+  <p>多 Agent 会放大吞吐，也会放大费用和冲突。一个问题本来只需读三个文件，拆成四个 Agent 往往更慢；只有搜索空间能真正分开，或者需要独立复核时，并发才有意义。</p>
+
+  <p>工作区隔离只能避免几个进程同时踩同一份文件，不能替你解决语义冲突。两个 sub-agent 分别修改数据库 schema 和调用方，单看各自测试都可能通过，合起来却缺一段迁移。主 Agent 收回结果后还得重新跑集成验证。把“并发完成”直接当成“可以合并”，是多 Agent 流程里最危险的省略。</p>
+
+  <h3>浏览器、搜索、记忆与外部协议</h3>
+
+  <p>OMP 内置网页搜索、浏览器和桌面控制，也能发现已有配置中的 MCP Server。它的本地 SQLite 记忆引擎提供 retain、recall、reflect 和 memory edit 等操作，不过记忆工具默认关闭，需要明确配置后才会出现。这样的默认值是合理的：长期记忆牵涉保留范围、错误修正和隐私，不适合悄悄开启。</p>
+
+  <p>OMP 的主要交互面仍是终端 TUI。它可以通过 SDK 嵌入 Node/Bun 程序，通过 RPC 给其他进程调用，也能用 ACP 接入编辑器；<code>/collab</code> 还可以把实时会话分享给别人。Browser 工具负责操作网页，协作页负责旁观或共同控制会话；项目没有附送通用 Web 管理后台。</p>
+
+  <figure class="diagram">
+    <figcaption>图 3：一次较完整的 OMP 修复链路。并非每次任务都会走满这些步骤。</figcaption>
+    <div class="tool-path">
+      <div class="tool-row"><span class="tool-num">1</span><span class="tool-who">理解现场</span><span class="tool-what">读取失败日志和相关文件，用 grep、AST 摘要或 LSP 缩小范围。</span></div>
+      <div class="tool-row"><span class="tool-num">2</span><span class="tool-who">验证猜测</span><span class="tool-what">运行最小测试；必要时启动 DAP，检查实际堆栈和变量。</span></div>
+      <div class="tool-row"><span class="tool-num">3</span><span class="tool-who">修改</span><span class="tool-what">用 Hashline 锚点提交编辑；锚点过期就停止并重新读取。</span></div>
+      <div class="tool-row"><span class="tool-num">4</span><span class="tool-who">静态反馈</span><span class="tool-what">LSP 返回诊断、引用变化和重命名影响。</span></div>
+      <div class="tool-row"><span class="tool-num">5</span><span class="tool-who">运行验证</span><span class="tool-what">执行针对性测试，再跑约定的 lint、类型检查或完整测试。</span></div>
+      <div class="tool-row"><span class="tool-num">6</span><span class="tool-who">复核</span><span class="tool-what">复杂改动可以交给 reviewer sub-agent；最终是否提交、发布仍由工作流和权限决定。</span></div>
+    </div>
+  </figure>
+
+  <h2 id="relationship">共同血缘能带来什么</h2>
+
+  <p>所谓“化学反应”发生在项目演化上。Pi 先做出一个小而开放的 Agent harness，让用户自己定义工作流；OMP 接过这副骨架，继续试验代码编辑、LSP、调试、搜索和多 Agent 能否被调成一套顺手的默认配置。</p>
+
+  <p>它们会互相影响，社区扩展也可能在两边移植。用户还能把相同的 <code>AGENTS.md</code>、skills、模型供应商和外部 CLI 带到不同工具中。两个有共同祖先的操作系统发行版，也常会共享理念和文件格式；用这个类比理解二者更接近现状。</p>
+
+  <table class="compare">
+    <thead><tr><th>问题</th><th>Pi</th><th>Oh My Pi</th></tr></thead>
+    <tbody>
+      <tr><th>基本取向</th><td>核心尽量小，把选择权留给 extension、skill 和外部环境</td><td>把高频的 Coding Agent 能力整合、调优后直接交付</td></tr>
+      <tr><th>默认工具面</th><td>文件、编辑、shell 为主</td><td>文件和 shell 之外，加入 LSP、DAP、浏览器、搜索、代码执行、sub-agent 等</td></tr>
+      <tr><th>长期记忆</th><td>不是默认核心能力，可自行扩展</td><td>提供本地记忆引擎和工具，但默认关闭</td></tr>
+      <tr><th>MCP</th><td>官方刻意不内置，通过 extension 接入</td><td>可以发现和使用 MCP Server 配置</td></tr>
+      <tr><th>维护感受</th><td>要自己挑选、理解和维护组合</td><td>开箱能力多，同时承受更大的配置面和更快的变化</td></tr>
+      <tr><th>二次开发</th><td>Extension、Package、SDK、RPC</td><td>Extension、marketplace/npm、SDK、RPC、ACP</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="scenarios">三个场景，差别会更具体</h2>
+
+  <section class="scenario">
+    <h3>代码修复与运维排障</h3>
+    <p>这是 OMP 最贴近自身定位的场景。一个跨模块重命名可以先查 LSP 引用，再执行 rename，写入后立即读取诊断；一个原生进程崩溃可以接调试器，而不是猜堆栈。若问题可以拆成“定位回归提交”“检查日志”“审查修复”三条独立线索，再让 sub-agent 并行调查。</p>
+    <p>Pi 也能完成这类工作，而且简单问题未必更慢。团队如果已经有成熟的 CLI、测试脚本和容器环境，Pi 的 <code>bash</code> 加少量 skill 可能已经够用。不要因为 OMP 有三十多种工具，就要求每次修复都把它们走一遍。</p>
+  </section>
+
+  <section class="scenario">
+    <h3>个人知识库与资料整理</h3>
+    <p>OMP 可以搜索网页、读取页面和 PDF，再把整理结果写进本地笔记；启用记忆后，还能保留经过筛选的事实。做久了以后，麻烦会集中在资料来源能否追溯、旧结论怎样失效，以及哪些隐私内容不该进入长期记忆。</p>
+    <p>Pi 的做法更像搭积木：选定抓取 CLI 或 API，写一个 skill 规定引用和落盘格式，需要时再用 extension 增加工具。第一次配置会慢些，之后的行为却更容易按个人习惯收紧。</p>
+  </section>
+
+  <section class="scenario">
+    <h3>数据分析与报表</h3>
+    <p>OMP 的持久 Python/JavaScript 单元适合探索数据，尤其是代码可以回调 read、search 等工具时，大文件不必整份进入模型上下文。Pi 则可以直接调用项目已有的 Python、R、DuckDB 或 shell 脚本。两边都能做，但报表一旦进入每天固定运行、必须可追溯的生产流程，就应该把稳定步骤写成普通 Workflow，让 Agent 只处理异常解释和临时调查。</p>
+  </section>
+
+  <h2 id="choice">我会怎么选</h2>
+
+  <p>如果目标是把 Agent 嵌入公司内部平台，我会先看 Pi。理由很实际：需要接进现有 CI、容器、审计和权限系统时，一个边界清楚的 core 比三十个现成工具更省事。团队可以只暴露允许的能力，不必先关闭一堆用不到的默认项。</p>
+
+  <p>如果只是想在终端里尽快得到一套能干活的重型工作台，我会先试 OMP。LSP、调试、浏览器、搜索和 sub-agent 都已经接好，省下的是收集扩展和磨合工具的时间。账不会消失，只是晚点结：工具越多，升级时要看的 changelog 越长，某项默认行为变化时排查范围也越大。</p>
+
+  <p>还有一条比功能表更实际的判断：团队能否承担它的安全面。Pi 默认继承用户权限；OMP 能调用的系统能力更多，即使加入审批声明和工作区隔离，也不能把提示词当沙箱。生产凭据、发布权限和不可逆操作仍应放在 Agent 进程之外，由容器、操作系统权限、CI 审批和后端授权真正限制。</p>
+
+  <div class="decision" role="img" aria-label="Pi 与 Oh My Pi 选型路径">要把 Agent 嵌入自己的平台或产品？
+├─ 是 → 先看 Pi；自己定义工具、权限和运行环境
+└─ 否 → 想不想自己收集扩展、调工具链？
+        ├─ 想，且重视最小核心 → Pi
+        └─ 不想，希望 LSP、调试、浏览器立即可用 → Oh My Pi
+
+任务会接触生产凭据、发布权限或重要数据？
+└─ 无论选谁，先做外部 sandbox、最小权限和人工审批</div>
+
+  <p>“Digital Human” 和 “Super Agent” 这类名字还会继续换。几年后仍要维护的，多半是那些不炫目的部件：可替换的模型接口、可观察的循环、稳定的工具协议、受控的执行环境、能迁移的 skills，以及出了错可以重放的会话。Pi 把组装权交给使用者；OMP 选择把工具链做深。它们的分歧比任何“终极助手”口号都更有参考价值。</p>
+
+  <p>没有哪条路线天然正确。先知道自己要交给 Agent 哪些权限、哪些决策，再选工具，通常比先被功能列表打动更可靠。</p>
+
+  <h2>参考资料</h2>
+
+  <ul class="sources">
+    <li><a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">Pi Agent Harness 源码与项目说明</a></li>
+    <li><a href="https://pi.dev/docs/latest/" target="_blank" rel="noopener noreferrer">Pi 官方文档</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/main/packages/agent/README.md" target="_blank" rel="noopener noreferrer">Pi Agent Core：消息流、工具执行与事件模型</a></li>
+    <li><a href="https://pi.dev/news/2026/5/7/pi-has-a-new-home" target="_blank" rel="noopener noreferrer">Pi 迁移到 Earendil Works 的说明</a></li>
+    <li><a href="https://github.com/can1357/oh-my-pi" target="_blank" rel="noopener noreferrer">Oh My Pi 源码与功能说明</a></li>
+    <li><a href="https://omp.sh/docs/sdk" target="_blank" rel="noopener noreferrer">Oh My Pi SDK、RPC 与 ACP 文档</a></li>
+  </ul>
+</div>
