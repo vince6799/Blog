@@ -343,12 +343,13 @@ https://blog.a80s.com/baidu_verify_codeva-xawqNP00O2.html
 ```yaml
 ---
 layout: null
+permalink: /baidu_verify_codeva-xawqNP00O2.html
 sitemap: false
 ---
 ca0457357ae8b0f5bb23e27e26b3f00b
 ```
 
-Jekyll 构建时会移除 Front Matter，公网文件的正文仍然只有百度给出的验证字符串。Pages 构建完成后，应同时检查两件事：验证 URL 能否返回原字符串，以及 `sitemap.xml` 中是否已经没有这个地址。
+显式 `permalink` 很重要：站点若配置了全局永久链接规则，缺少这一行可能把验证文件改成无扩展名路径，原 `.html` 地址会变成 404。Jekyll 构建时会移除 Front Matter，公网文件的正文仍然只有百度给出的验证字符串。Pages 构建完成后，应同时检查两件事：验证 URL 能否返回原字符串，以及 `sitemap.xml` 中是否已经没有这个地址。
 
 验证通过后，在普通收录中提交：
 
