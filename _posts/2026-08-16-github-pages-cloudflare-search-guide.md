@@ -326,7 +326,7 @@ Google Analytics 的 Measurement ID 可以写进配置，再由布局加载 `gta
 https://blog.a80s.com
 ```
 
-文件验证最直观。下载百度给出的 HTML 文件，原样放到仓库根目录。例如本站使用：
+文件验证最直观。下载百度给出的 HTML 文件后，把文件名和验证字符串保留下来。例如本站使用：
 
 ```text
 baidu_verify_codeva-xawqNP00O2.html
@@ -338,7 +338,17 @@ Pages 构建完成后，先直接打开：
 https://blog.a80s.com/baidu_verify_codeva-xawqNP00O2.html
 ```
 
-确认返回内容与下载文件完全一致，再回百度点击验证。文件名、内容和路径都不要自行修改。
+如果直接把验证文件当作静态文件发布，`jekyll-sitemap` 也可能把它列进 Sitemap。验证地址不是搜索结果候选页，没必要交给搜索引擎，因此本站给文件加了 Front Matter：
+
+```yaml
+---
+layout: null
+sitemap: false
+---
+ca0457357ae8b0f5bb23e27e26b3f00b
+```
+
+Jekyll 构建时会移除 Front Matter，公网文件的正文仍然只有百度给出的验证字符串。Pages 构建完成后，应同时检查两件事：验证 URL 能否返回原字符串，以及 `sitemap.xml` 中是否已经没有这个地址。
 
 验证通过后，在普通收录中提交：
 
@@ -359,7 +369,9 @@ Name: BAIDU_PUSH_TOKEN
 
 普通工作流使用 Repository secret 即可。Environment secret 只有在 Job 明确绑定某个 Environment 时才会生效。
 
-本站不在每次 push 后立即提交，而是每天北京时间 23:30 读取线上 Sitemap。GitHub Actions 的 Cron 使用 UTC，北京时间 23:30 对应 `15:30 UTC`：
+本站不在每次 push 后立即提交，而是每天北京时间 23:30 运行一次。GitHub Actions 的 Cron 使用 UTC，北京时间 23:30 对应 `15:30 UTC`。
+
+最初的工作流会先下载线上 Sitemap，再提取其中的 URL。后来 Cloudflare 对 GitHub 托管 Runner 返回过 `403`，任务在提交百度之前就中止了。与其继续调低 Cloudflare 的防护，不如取消这项不必要的外部依赖：工作流检出仓库，直接从 `_posts` 生成 URL，并根据 Front Matter 排除隐藏文章。下面是核心部分：
 
 ```yaml
 name: Submit URLs to Baidu
@@ -377,18 +389,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch URLs
-        run: |
-          curl --fail --silent --show-error \
-            --retry 3 \
-            "https://blog.a80s.com/sitemap.xml" \
-            -o sitemap.xml
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-          # 提取 Sitemap 的 <loc> 地址，只保留本站 URL，并在提交前去重。
-          grep -oE '<loc>[^<]+' sitemap.xml \
-            | sed 's#<loc>##' \
-            | grep '^https://blog\.a80s\.com/' \
-            | sort -u > urls.txt
+      - name: Build public URL list
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            printf '%s\n' \
+              'https://blog.a80s.com/' \
+              'https://blog.a80s.com/about/'
+
+            while IFS= read -r -d '' post; do
+              front_matter=$(awk '
+                NR == 1 && $0 == "---" { inside = 1; next }
+                inside && $0 == "---" { exit }
+                inside { print }
+              ' "${post}")
+
+              if printf '%s\n' "${front_matter}" \
+                | grep -Eiq '^(hidden:[[:space:]]*true|sitemap:[[:space:]]*false)[[:space:]]*$'; then
+                continue
+              fi
+
+              permalink=$(printf '%s\n' "${front_matter}" \
+                | awk -F':[[:space:]]*' '$1 == "permalink" { print $2; exit }' \
+                | tr -d "\"'")
+
+              if [ -z "${permalink}" ]; then
+                filename=$(basename "${post}")
+                slug=${filename#????-??-??-}
+                slug=${slug%.*}
+                permalink="/articles/${slug}/"
+              fi
+
+              [ "${permalink}" = "/articles/boostnet-review/" ] && continue
+              printf 'https://blog.a80s.com%s\n' "${permalink}"
+            done < <(find _posts -maxdepth 1 -type f \
+              \( -name '*.md' -o -name '*.markdown' -o -name '*.html' \) \
+              -print0)
+          } | sort -u > urls.txt
 
       - name: Submit to Baidu
         env:
@@ -402,6 +444,8 @@ jobs:
           echo "${response}" | jq .
           echo "${response}" | jq -e 'has("success")' >/dev/null
 ```
+
+这里仍然把 BoostNet 路径作为一道显式保险，即使以后误删了文章的 `hidden: true` 或 `sitemap: false`，定时任务也不会把它提交给百度。实际运行时，工作流生成了 6 个地址：首页、关于页和 4 篇公开文章；验证文件与 BoostNet 均不在列表中。
 
 第一次写这个工作流时，提交地址误用了 HTTPS，Actions 返回：
 
