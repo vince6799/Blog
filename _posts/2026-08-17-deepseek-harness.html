@@ -1,0 +1,406 @@
+---
+layout: post
+title: "剖析 DeepSeek Harness：它如何用“万物皆插件”颠覆传统 AI Agent 架构？"
+description: "从 Cordis、插件树、Agent Loop、事件日志、Profile、MCP、子 Agent 与沙箱实现出发，拆解 DeepSeek Harness 的架构价值，也核对那些容易被宣传稿写错的细节。"
+category: AI 工程
+reading_time: 约 36 分钟阅读
+permalink: /articles/deepseek-harness-everything-is-a-plugin/
+---
+<style>
+.dsh-article .article-note{margin:30px 0;padding:18px 21px;border:1px dashed #9db6a6;border-radius:12px;background:rgba(255,255,255,.38);color:#405049;font-size:14px}.dsh-article .toc{margin:36px 0 44px;padding:24px 27px;border:1px solid #d7dcd6;border-radius:14px;background:#fffefa}.dsh-article .toc strong{display:block;margin-bottom:10px;font:700 19px Georgia,"Songti SC",serif}.dsh-article .toc ol{margin:0;padding-left:1.3em;columns:2;column-gap:34px}.dsh-article .toc li{margin:.28em 0;break-inside:avoid}.dsh-article .toc a{text-decoration:none;font-size:14px}.dsh-article .diagram{margin:38px 0;padding:26px;border:1px solid #d7dcd6;border-radius:16px;background:#fffefa;box-shadow:0 10px 30px rgba(23,32,28,.04)}.dsh-article .diagram figcaption{margin-bottom:22px;color:#68736d;font-size:13px}.kernel{display:grid;grid-template-columns:1fr 48px 1.35fr 48px 1fr;gap:8px;align-items:center}.kernel-card{min-height:164px;padding:19px;border:1px solid #d7dcd6;border-radius:12px;background:#fff}.kernel-card.core{border-color:#78a68d;background:#edf5ef}.kernel-card b{display:block;margin-bottom:9px;color:#0e5134;font:700 17px Georgia,"Songti SC",serif}.kernel-card span{display:block;margin:.38em 0;color:#53615a;font-size:13px}.kernel-arrow{text-align:center;color:#16724a;font-size:24px}.plugin-cloud{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.plugin-pill{padding:10px 8px;border-radius:8px;background:#f3f1e9;text-align:center;font-size:12px;font-weight:700}.event-flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;align-items:stretch}.event-step{position:relative;padding:14px 9px;border:1px solid #d7dcd6;border-radius:10px;background:white;text-align:center}.event-step:not(:last-child):after{content:"→";position:absolute;right:-9px;top:50%;z-index:2;transform:translateY(-50%);color:#16724a;font-weight:800}.event-step b{display:block;color:#0e5134;font-size:12px}.event-step small{display:block;margin-top:6px;color:#68736d;font-size:11px;line-height:1.45}.planes{display:grid;grid-template-columns:1fr 1fr;gap:16px}.plane{padding:22px;border:1px solid #d7dcd6;border-radius:12px;background:#fff}.plane h4{margin:0 0 9px;color:#0e5134}.plane p{margin:.5em 0;color:#53615a;font-size:13px}.logline{display:grid;grid-template-columns:42px 1fr 1.15fr;gap:12px;padding:11px 0;border-bottom:1px solid #e0e3df;align-items:start}.logline:last-child{border-bottom:0}.logline .seq{color:#16724a;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}.logline code{font-size:12px}.logline span:last-child{color:#68736d;font-size:12px}.compare{width:100%;margin:30px 0;border-collapse:collapse;background:#fffefa;font-size:14px}.compare th,.compare td{padding:13px 14px;border:1px solid #d7dcd6;text-align:left;vertical-align:top}.compare th{background:#e7efe9}.case{margin:30px 0;padding:24px 26px;border-left:4px solid #16724a;border-radius:0 12px 12px 0;background:rgba(255,255,255,.55)}.case h3{margin:0 0 9px}.warning{margin:28px 0;padding:19px 22px;border:1px solid #d7b485;border-radius:12px;background:#fff7e9}.warning strong{color:#76501f}.decision-tree{margin:32px 0;padding:22px 24px;border:1px solid #bed2c5;border-radius:14px;background:#eef5f0;font:14px/1.9 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap}.decision-tree strong{font-family:inherit;color:#0e5134}.dsh-article .sources li{margin:.7em 0}.dsh-article pre{position:relative}.dsh-article .code-caption{margin:28px 0 -17px;color:#68736d;font-size:13px}.verdict{margin:36px 0;padding:24px 26px;border:1px solid #9bbba8;border-radius:14px;background:#eaf3ed}.verdict p:last-child{margin-bottom:0}@media(max-width:800px){.dsh-article .toc ol{columns:1}.kernel{grid-template-columns:1fr}.kernel-arrow{transform:rotate(90deg)}.event-flow{grid-template-columns:1fr 1fr}.event-step:not(:last-child):after{display:none}.planes{grid-template-columns:1fr}.compare{display:block;overflow-x:auto}.dsh-article .diagram{padding:20px 16px}.plugin-cloud{grid-template-columns:1fr 1fr}.logline{grid-template-columns:34px 1fr}.logline span:last-child{grid-column:2}.decision-tree{padding:18px 16px;font-size:12px}}
+</style>
+
+<div class="dsh-article">
+  <p>“万物皆插件”很容易写成一句口号：模型是插件，工具是插件，界面也是插件。到这里为止，它和许多框架的 README 没有区别。DeepSeek Harness 值得拆开看，不在于插件数量多，而在于它把通常藏在产品内部的 Agent loop、会话日志、权限策略和 UI 都放进了同一套生命周期与依赖系统。</p>
+
+  <p>这会改变开发者能改什么，也会把一批原本由厂商消化的问题推回给开发者。配置树可以替换一切，意味着依赖关系、兼容性和安全责任也会从“一套产品”变成“一组会变化的组合”。标题里的“颠覆”是否成立，不能听口号，要看这些边界到底落在代码的什么位置。</p>
+
+  <aside class="article-note"><strong>版本说明：</strong>本文核对于 2026 年 8 月 17 日，代码基线为 <code>dsh-v0.1.0-rc.7</code>。官方仓库仍标注 <em>Developer Preview</em>，并明确警告会出现破坏性变更。另有多个同名的 <code>deepseek-harness</code> 项目，本文只讨论 <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer"><code>deepseek-ai/deepseek-harness</code></a>。</aside>
+
+  <nav class="toc" aria-label="文章目录">
+    <strong>本文目录</strong>
+    <ol>
+      <li><a href="#boundary">变化的是产品边界</a></li>
+      <li><a href="#cordis">Cordis 如何托住插件树</a></li>
+      <li><a href="#loop">Agent Loop 怎样被拆开</a></li>
+      <li><a href="#profile">Profile、Bundle 与 Patch</a></li>
+      <li><a href="#tools">工具、MCP 与 Code Mode</a></li>
+      <li><a href="#subagent">异构子 Agent 的真实边界</a></li>
+      <li><a href="#trajectory">日志、恢复与可观测性</a></li>
+      <li><a href="#security">Preset 不是安全级别</a></li>
+      <li><a href="#compare">与成品型 Agent 的差别</a></li>
+      <li><a href="#limits">代价与结论</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="boundary">dsh 把产品边界推开了</h2>
+
+  <p>Claude Code、Codex 这类 Coding Agent 交付的是经过调校的完整产品：模型接入、提示词、工具协议、循环、权限和交互界面由产品方一起演进。它们并非完全不可扩展——MCP、Hooks、Skills、项目指令都在扩大可定制范围——但用户通常扩展的是产品公开的接口，不会把默认 loop 换成自己的实现，再要求原界面照常工作。</p>
+
+  <p>DeepSeek Harness 选择了另一条边界。它将自己定义为 <em>agent harness</em>，发布 MIT 许可的完整代码，并把运行实例组装成一棵 Cordis 插件树。默认实现仍然存在，只是默认实现不享有“只有核心才能做”的特权。</p>
+
+  <figure class="diagram">
+    <figcaption>图 1：dsh 更像可组装的运行内核。左侧配置决定中间有哪些服务，右侧应用只消费这些服务。</figcaption>
+    <div class="kernel">
+      <div class="kernel-card">
+        <b>组合层</b>
+        <span>Profile</span><span>Bundle patch</span><span>用户 cordis.patch.yml</span><span>命令行 --patch</span>
+      </div>
+      <div class="kernel-arrow">→</div>
+      <div class="kernel-card core">
+        <b>Cordis Context</b>
+        <div class="plugin-cloud">
+          <div class="plugin-pill">LLM</div><div class="plugin-pill">Tools</div><div class="plugin-pill">Loop</div><div class="plugin-pill">Sessions</div><div class="plugin-pill">Sandbox</div><div class="plugin-pill">UI</div>
+        </div>
+      </div>
+      <div class="kernel-arrow">→</div>
+      <div class="kernel-card">
+        <b>运行入口</b>
+        <span>Web UI</span><span>Headless runner</span><span>SDK / API Gateway</span><span>第三方界面</span>
+      </div>
+    </div>
+  </figure>
+
+  <p>dsh 仍然有内核。Cordis 的上下文、插件生命周期、Loader 和事件分发构成了基础设施；会话事件也有严格词汇表。官方所说的“没有特权内核”，指的是模型适配器、工具注册表、默认循环、持久化和界面都通过插件挂载，没有一块闭合的 Agent 业务逻辑只能靠修改核心源码替换。</p>
+
+  <p>Memory 也需要说准。当前发行版没有一个名为 <code>Memory</code> 的通用核心服务：短期会话由 append-only Session 日志承担，跨会话长期记忆则通过默认关闭的 MCP 示例接入 Memorix、Engram 或 MCP Reference Memory。架构允许安装记忆能力，不代表默认系统已经替用户决定了记什么、何时召回。</p>
+
+  <h2 id="cordis">Cordis 不只是依赖注入容器</h2>
+
+  <p>把 Cordis 简写成 IoC 或 DI 容器，会漏掉它对 dsh 最关键的部分：<strong>时间上的可组合性</strong>。一个插件声明自己依赖哪些服务，等服务就绪后启动；它注册的工具、事件监听器和提示词片段都有对应的 disposer。配置热更新或插件卸载时，这些副作用一起撤销。</p>
+
+  <p>例如，工具插件不必导入某个全局 <code>ToolRegistry</code> 单例。它声明 <code>inject = ['tools']</code>，运行时从 <code>ctx.tools</code> 取得服务。服务提供方换了，消费方代码不动。加载顺序也不靠 YAML 里的先后位置碰运气，而由依赖关系决定。</p>
+
+  <p class="code-caption">官方入门文档中的工具插件可以压缩成下面这段：</p>
+
+  <pre><code>import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+
+export const inject = ['tools']
+
+export function apply(ctx: Context) {
+  ctx.tools.register(defineTool({
+    name: 'greet',
+    description: 'Greet someone by name.',
+    parameters: {
+      name: { type: 'string', required: true }
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) =&gt; [{ type: 'text', text: value }]
+    },
+    async execute(args) {
+      return `Hello, ${args.name}!`
+    }
+  }))
+}</code></pre>
+
+  <p>短短一段代码里有三层约束：<code>inject</code> 表达运行依赖，<code>parameters</code> 校验模型输入，<code>output.schema</code> 与 <code>render</code> 分开处理程序值和模型可见文本。插件卸载后，注册项随生命周期撤销，不需要作者手动从一堆全局表里清理。</p>
+
+  <p>Cordis 的事件分发比 EventEmitter 多了控制语义。dsh 使用 <code>emit</code>、<code>parallel</code>、<code>serial</code> 和 <code>waterfall</code> 四种模式。waterfall 里的监听器可以调用 <code>next()</code> 把控制权交给下游，也可以改写请求、包装返回值，或者直接短路。权限检查、请求重写、重试和工具结果处理由此成为可插拔的中间件链。</p>
+
+  <div class="warning"><strong>插件化不等于任意组合。</strong>同一个服务在某个 Context 中只能有一个提供方；插件还分 Host plane 与 Agent plane，并受 scope、realm 和事件词汇约束。dsh 的自由来自明确的 seam，不是把几十个 npm 包塞进配置就一定能启动。</div>
+
+  <h3>一行导出，击穿了 178 个测试</h3>
+
+  <p>dsh 仓库自己的第一份 postmortem 比任何架构口号都更能说明 Cordis 的脾气。ACP 插件同时导出了 <code>name</code>、<code>inject</code>、<code>Config</code> 和 <code>apply</code>，末尾又顺手加了一行 <code>export default apply</code>。Loader 优先取 default export，拿到的只剩一个裸函数；挂在函数同级的 <code>inject</code> 随之消失。Zed 第一次调用 <code>session/new</code>，服务器当场报错：</p>
+
+  <pre><code>Zed             ACP bridge              Cordis Loader
+ | session/new       |                         |
+ |------------------&gt;| import plugin module    |
+ |                   |------------------------&gt;|
+ |                   |       default = apply   |
+ |                   |&lt;------------------------|
+ |                   | ctx.agents  ✗ no inject |
+ |&lt;------------------| Internal error          |
+
+cannot get property "agents" without inject</code></pre>
+
+  <p>当时有 178 个绿色测试，行覆盖率 100%。测试却是手工挂载插件对象，没有经过真实 Loader，刚好绕开了出错入口。这个事故给“万物皆插件”补上了后半句：加载方式本身就是产品行为。单测证明 <code>apply()</code> 能跑，不等于打包后的插件能被 Loader 正确识别。</p>
+
+  <h2 id="loop">Agent Loop 到底怎样被拆开</h2>
+
+  <p>默认 loop 仍然是大家熟悉的模型—工具循环，但它没有把提示词组装、模型传输和工具执行写进一个大函数。一次 step 的关键路径大致如下：</p>
+
+  <figure class="diagram">
+    <figcaption>图 2：一次 step 的主要控制点。绿色名称是可以被插件监听或替换的 seam。</figcaption>
+    <div class="event-flow">
+      <div class="event-step"><b>领取输入</b><small>inbox / turn start</small></div>
+      <div class="event-step"><b>agent/pre-step</b><small>拒绝或改写消息</small></div>
+      <div class="event-step"><b>组装请求</b><small>prompt + schemas</small></div>
+      <div class="event-step"><b>llm/stream</b><small>选择适配器并流式生成</small></div>
+      <div class="event-step"><b>tools/pre</b><small>权限与参数策略</small></div>
+      <div class="event-step"><b>tools/execute</b><small>并发执行与屏障</small></div>
+      <div class="event-step"><b>tools/post</b><small>结果改写并决定续跑</small></div>
+    </div>
+  </figure>
+
+  <p>一个 step 是一次模型请求以及紧随其后的工具调用；一个 turn 可以包含多个 step。模型返回工具请求，执行结果写进会话日志，loop 再发起下一次请求。没有工具债务、没有新输入，且停止钩子不要求续跑时，turn 才结束。</p>
+
+  <p>“Loop Plugin 可以替换 ReAct 或 Plan-Execute”这句话方向没错，但说得太轻巧。默认循环通过 <code>ctx.agents.setFactory()</code> 向注册表提供创建与恢复能力，UI、SDK 和子 Agent 服务都依赖这套契约。替换 loop 要实现 Agent 接口，维持 turn/step 日志不变量，还得处理取消、错误恢复、inbox、工具并发和持久化。这条 seam 公开得很彻底，接手成本也很高。</p>
+
+  <div class="planes">
+    <section class="plane">
+      <h4>Host plane</h4>
+      <p>进程级注册表和跨会话能力：会话持久化、模型路由、沙箱、审批、子 Agent provider、工具注册表。</p>
+      <p>这类服务通常只能挂载一次。把它误放进每个 preset，会造成重复注册或让其他宿主组件找不到服务。</p>
+    </section>
+    <section class="plane">
+      <h4>Agent plane</h4>
+      <p>单个 Agent 可见的组合：persona、工具集合、Skills、计划模式、压缩策略、工作流工具。</p>
+      <p>需要私有状态的服务放进 isolate realm；普通注册则按 Agent scope 限定可见范围。</p>
+    </section>
+  </div>
+
+  <h2 id="profile">Profile、Bundle 与 Patch：配置不是一份大 YAML</h2>
+
+  <p>dsh 的 Profile 是一套具名安装：它保存依赖、列出 Bundle，并拥有用户自己的 <code>cordis.patch.yml</code>。Bundle 是一组可分发的插件配置层。启动时从空树开始，依次叠加 Profile 声明的 Bundle、Profile patch、Home 级 patch，最后才是命令行传入的 <code>--patch</code>。</p>
+
+  <pre><code># 查看 web profile 最终会启动的完整插件树
+dsh --profile web --dump-config
+
+# 临时叠加一个配置层，不修改已有 profile
+dsh web --patch ./extra.cordis.yml
+
+# 安装会贡献配置层的第三方 bundle
+dsh plugin --profile web add &lt;package-or-git-spec&gt;</code></pre>
+
+  <p>后应用的层优先，但 patch 并不是对 <code>config</code> 做深度合并：它按 <code>id</code> 定位条目，替换该条目的整个 <code>config</code>，也可以插入新条目。这个细节很重要。只想改端口却复制了一份不完整的 config，可能顺手删掉运行时表达式和其他默认值。</p>
+
+  <p>Profile 解决“这台机器准备了哪些插件”，Agent preset 解决“某个会话挂载哪些面向模型的能力”。目前随发行版提供四个 preset：</p>
+
+  <table class="compare">
+    <thead><tr><th>Preset</th><th>实际用途</th><th>需要注意的地方</th></tr></thead>
+    <tbody>
+      <tr><td>标准模式</td><td>完整编码 Agent：文件、Shell、搜索、Skills、计划、目标、子 Agent 与工作流。</td><td>它是能力组合，不代表最高权限。</td></tr>
+      <tr><td>PTC 模式</td><td>沿用标准能力，把工具呈现为一个 TypeScript SDK，由 <code>run_code</code> 在单次程序中组合调用。</td><td>减少模型往返，但程序执行和子调用仍受工具流水线约束。</td></tr>
+      <tr><td>极简模式</td><td>固定系统提示，只保留持久 Bash 与 <code>str_replace_editor</code>。</td><td>默认文件提供方与标准模式不同，不能把“工具少”理解为“权限更低”。</td></tr>
+      <tr><td>创造模式</td><td>在标准能力上增加 Cordis 运行时检查、临时挂载和 preset 创作工具。</td><td>官方配置直接提醒：应把它视作 Shell 访问，不是安全实验区。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="tools">工具、MCP 与 Code Mode 分别处在哪一层</h2>
+
+  <p>原生工具最终都进入 <code>ctx.tools</code>。默认循环负责把 schema 放进模型请求，再把工具调用送进 <code>pre-execute → execute → post-execute</code> 流水线。权限策略、后台任务、结果裁剪和 UI 卡片都可以在这里介入。</p>
+
+  <p>MCP Client 插件做的事很具体：连接外部 MCP Server，读取工具列表，并把每个工具注册成 <code>mcp__&lt;server&gt;__&lt;name&gt;</code>。从 loop 视角看，MCP 工具与本地工具使用同一注册表和执行路径。当前实现只桥接 MCP Tools，Resources 与 Prompts 还没有 Harness 消费方。</p>
+
+  <pre><code>- id: mcp-internal
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: internal
+    transport: streamable-http
+    url: http://127.0.0.1:3000/mcp
+    headers:
+      Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
+    failOnStartupError: true</code></pre>
+
+  <p>有个不太显眼却很要命的边界：stdio MCP Server 的命令运行在 Agent 沙箱之外，是宿主信任的可执行代码。因此 dsh 虽然随 CLI 带有 MCP Client 依赖，却不会默认启用任何 Server。把 MCP 写进配置，相当于允许那个包在宿主进程侧启动，不是仅仅“给模型多一个受限工具”。</p>
+
+  <p>MCP 断线时还有一段容易把排障人员绕进去的“灰色时间”。dsh 不会立刻从工具表中删掉最后一次同步成功的 schema；模型仍能看到工具名，真正调用时却会失败。后台按指数退避重新连接，成功后整代替换工具；连续失败达到上限，才注销这台 Server 的全部工具。也就是说，“工具还在列表里”只能证明它曾经发现成功，不能证明远端此刻可用。</p>
+
+  <pre><code>tools/list 成功  →  mcp__internal__search 已注册
+连接中断         →  schema 暂时保留，调用返回失败
+重连成功         →  重新发现并整代替换
+重试预算耗尽     →  注销该 Server 的全部工具</code></pre>
+
+  <p>PTC（Programmatic Tool Calling）处理的是另一件事。在 Native 模式下，模型每做一步都发出一次工具调用；在 PTC 模式下，模型只看到 <code>run_code</code> 和生成的 TypeScript SDK，可以在一个程序里调用多个已有工具。工具没有绕开注册表，只是模型与注册表之间多了一层可编程调度。</p>
+
+  <pre><code>// 概念示意：一个模型回合里完成并发搜索，再读取命中的文件
+const hits = await Promise.all([
+  tools.grep({ pattern: 'SessionEvent', path: 'packages' }),
+  tools.grep({ pattern: 'agent/pre-step', path: 'packages' })
+])
+
+const files = unique(hits.flatMap(x =&gt; x.files)).slice(0, 6)
+return await Promise.all(files.map(path =&gt; tools.read({ path })))</code></pre>
+
+  <p>收益是少几次模型往返，大块中间值也不必全部进入模型上下文；代价是调试对象从“哪次工具调用错了”扩展为“生成程序、SDK 桥接或某个子调用哪里错了”。打开 PTC 之前，最好先确认模型确实把时间耗在往返，而不是把错误藏进更长的生成代码里。</p>
+
+  <p>这里有几个很具体的坑。当前 TypeScript runtime 只做 type stripping，不做类型检查；<code>enum</code> 和 namespace 这类不可擦除语法会在 worker 启动前被拒绝。每次 <code>run_code</code> 又是全新的 worker，上一次定义的变量不会保留。更麻烦的是副作用不回滚：程序先改了三个文件，第四个工具调用失败，前三次修改仍然留在工作区。模型若把整段程序当成事务反复重跑，很快就会从“节省往返”变成“重复执行副作用”。</p>
+
+  <pre><code>run_code #17
+  ├─ tools.read(...)          ok
+  ├─ tools.edit(fileA, ...)   ok      # 已落盘
+  ├─ tools.edit(fileB, ...)   ok      # 已落盘
+  └─ tools.test(...)          failed
+
+retry run_code #18
+  └─ 如果不先检查 fileA/fileB，前两次编辑可能被重复应用</code></pre>
+
+  <p>worker 有 compute、wall-clock、heap 和输出上限，但它只提供 containment，不是安全边界。模型代码启动的 OS 子进程甚至可能在 worker 被终止后继续存活。生产环境若开放 PTC，外层进程隔离和幂等工具设计比那张漂亮的 SDK 类型表更重要。</p>
+
+  <h2 id="subagent">“Agent 的 Agent”已经能做，但没有宣传稿那么圆满</h2>
+
+  <p>dsh 的子 Agent seam 把委托提供方放在统一接口后面。内置的 <code>spawn</code> 可以创建新的本地 Agent，<code>fork</code> 可以带着父会话已完成的历史前缀创建分支。仓库还提供两个可选 provider：Claude Code 与 Codex。</p>
+
+  <p>它们确实能成为 dsh 的子节点。Codex provider 会启动 <code>codex app-server --stdio</code>，创建临时 thread 并提交一个 turn；Claude Code provider 通过官方 Agent SDK 发起一次 query。两者都继承父会话的工作目录，但不会继承父会话历史、persona、工具过滤或深度策略。</p>
+
+  <p>回传边界更窄：父 Agent 只得到子产品的最终文本或错误。子 Agent 的推理、工具轨迹、Token 用量、stderr 和文件 diff 不会合并进父会话日志。任务可以后台执行，但每次都是新进程、新会话、一次性请求，没有继续对话、池化或跨任务恢复。</p>
+
+  <pre><code># Host plane：安装并挂载 Codex provider
+- id: subagent-codex
+  name: '@deepseek-ai/dsh-subagent-codex'
+
+# Agent preset：暴露给模型的调用入口
+- id: tool-subagent-codex
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: codex
+    toolName: subagent_codex
+    backgroundMode: one-shot
+    maxDepth: provider-managed</code></pre>
+
+  <p>正式发行默认既不安装 provider，也不启用 preset 中预留的工具行。还要由宿主提供可用的 <code>codex</code> 或 <code>claude</code>、本机配置与登录状态。这里的“跨平台异构调度”成立，但更像受控的单次任务网关，而不是把三个 Agent 的内部状态统一进一个分布式运行时。</p>
+
+  <p>无人值守也是硬边界。Codex 子进程遇到命令或文件审批时，provider 会优先选择 <code>cancel</code>；遇到用户问题则提交空答案，MCP elicitation 直接拒绝。Claude Code 侧同样没有交互回调。于是一个在原生 CLI 里会弹框等人的任务，挂成子 Agent 后可能迅速失败。父 Agent 看不到孩子刚才卡在哪个审批框，只拿到最后错误。这种任务应该在委托前把权限和输入准备完整，或者干脆留在有人值守的产品里执行。</p>
+
+  <h2 id="trajectory">Append-only 日志带来了什么，又没有带来什么</h2>
+
+  <p>dsh 把 <code>SessionEvent</code> 作为会话事实源。用户消息、模型原始 chunk、组装后的 assistant message、工具调用与结果、turn/step 边界、请求头以及权限切换都按顺序追加。模型下一次看到的历史由日志投影出来，UI 的 Trajectory 视图也消费同一事件流。</p>
+
+  <figure class="diagram">
+    <figcaption>图 3：一段简化后的事件账本。界面、恢复和 fork 都从同一来源投影，避免另维护一份“当前状态”。</figcaption>
+    <div class="logline"><span class="seq">#120</span><code>turn/start</code><span>一次用户意图开始</span></div>
+    <div class="logline"><span class="seq">#121</span><code>step/start</code><span>准备第一次模型请求</span></div>
+    <div class="logline"><span class="seq">#122</span><code>request/header</code><span>模型、系统提示与工具 schema 快照</span></div>
+    <div class="logline"><span class="seq">#123…</span><code>assistant/chunk</code><span>保留流式输出以便 UI 复现</span></div>
+    <div class="logline"><span class="seq">#130</span><code>tool/call</code><span>工具名与参数进入持久事实</span></div>
+    <div class="logline"><span class="seq">#131</span><code>tool/result</code><span>结果或稳定错误码</span></div>
+    <div class="logline"><span class="seq">#132</span><code>step/end</code><span>工具欠下一次请求，继续下一 step</span></div>
+  </figure>
+
+  <p>Resume 会加载持久日志、修复崩溃留下的未闭合边界，然后创建新的运行实例。Fork 会复制一个结束于稳定边界的事件前缀，并记录父会话与 seed 长度。它们都不是把 JavaScript 堆栈冻结后恢复；崩溃在工具调用之后、结果写入之前发生时，系统只能把结果标为未知，提醒模型先验证副作用。</p>
+
+  <p>“Replay”也有两种容易混淆的含义。会话事件可以重放，以重建 UI 和派生状态；测试用的 <code>llm-replay</code> 还能用已录制模型流复现实验。但在真实生产会话里重新调用一个非确定性模型，并不保证得到相同输出。日志提供可审计输入和已发生事实，不提供时间倒流。</p>
+
+  <p>Web UI 默认运行在 <code>http://127.0.0.1:3080</code>。除了 Chat，Trajectory 可以查看 turn、step、请求、工具和耗时；统计区显示 TTFT、生成速度、输入/输出 Token、缓存读写 Token 与缓存命中率，并有上下文占用仪表。把“缓存命中率高”当成性能证据前仍要看供应商计费口径：不同适配器报告的 usage 字段并不完全等价。</p>
+
+  <p class="code-caption">下面是按 Trajectory 字段整理的终端示意，不是产品截图：</p>
+
+  <pre><code>DSH / session 8f2a                         context 41%  cache 86%
+────────────────────────────────────────────────────────────────
+TURN 12 · STEP 1
+  00:00.000  user/message       "修复登录回调的竞态"
+  00:00.014  request/header     deepseek-v4-pro · 27 tools
+  00:00.812  assistant/chunk    first token
+  00:02.438  tool/call          grep { pattern: "callback" }
+  00:02.492  tool/result        14 matches
+
+TURN 12 · STEP 2
+  00:02.506  request/header     unchanged
+  00:03.177  tool/call          read { path: "src/auth.ts" }
+  00:03.181  tool/result        218 lines
+────────────────────────────────────────────────────────────────
+TTFT 0.7s · 42.3 tok/s · input 18.4k · output 1.1k</code></pre>
+
+  <p>这张账本很适合回答“模型为什么又发了一次请求”“哪个工具拖了两秒”。它回答不了“模型为什么相信了错误线索”，也不能证明外部副作用与日志一致。Trajectory 是调试入口，不是自动生成的事故结论。</p>
+
+  <h2 id="security">四种 Agent preset，不是四级安全沙箱</h2>
+
+  <p>标准、PTC、极简、创造描述的是 Agent 能力组合。文件沙箱另有三种模式：</p>
+
+  <table class="compare">
+    <thead><tr><th>Sandbox mode</th><th>文件效果边界</th><th>容易误解的地方</th></tr></thead>
+    <tbody>
+      <tr><td><code>read-only</code></td><td>要求后端拒绝写入，只保留 Shell 必需的少量 sink。</td><td>不等于看不到宿主文件，也不禁止网络与进程可见性。</td></tr>
+      <tr><td><code>workspace-write</code></td><td>允许写工作区和后端承诺的临时区域。</td><td>工作区之外的外部服务仍需各自权限控制。</td></tr>
+      <tr><td><code>danger-full-access</code></td><td>绕过文件沙箱，直接执行原 argv。</td><td>它不是某个 provider 实现出的“更宽沙箱”，而是明确不隔离。</td></tr>
+    </tbody>
+  </table>
+
+  <p>本地后端按平台选择 Linux 的 bubblewrap/Landlock、macOS Seatbelt 或 Windows ACL 受限令牌，并报告 <code>full</code> 或 <code>partial</code> enforcement。没有可用后端时，受限模式必须 fail closed，不能静默退回裸执行。</p>
+
+  <p>这套错误分类也栽过跟头。旧版 Landlock 在能力不完整的内核上会输出一条提示，dsh 一度把这条提示与“子进程非零退出”拼在一起，当成沙箱启动失败。于是 <code>ripgrep</code> 正常用退出码 1 表示“没有匹配项”，上层收到的却是 <code>SANDBOX_UNAVAILABLE</code>。问题不在隔离失效，而在两条互不相干的事实被错误归因。后来修复同时收紧了信息行排除和退出状态判定，并补上旧 ABI 的组合测试。安全系统最怕这种诊断漂移：错误码看起来足够吓人，调查方向却完全错了。</p>
+
+  <p>这仍不是完整生产隔离。沙箱 seam 只承诺文件效果；容器、microVM 或远程执行需要一起替换 Shell、文件系统等能力提供方，确保它们处于同一个执行世界。只把 Bash 放进容器，而文件编辑工具仍写宿主目录，会得到一个边界互相打架的系统。</p>
+
+  <p>第三方插件还有更高一层风险：插件本身在宿主侧执行。<code>pnpm</code> 安装脚本、MCP stdio 命令、Cordis 插件的 <code>apply()</code> 都不受 Agent 文件沙箱保护。生产部署至少需要锁定版本或 commit、审查插件源代码、隔离宿主凭据，并把不可信任务放进外部容器或 microVM。</p>
+
+  <h2 id="compare">Harness 架构与成品型 Coding Agent 怎么比较</h2>
+
+  <p>把一边写成“全黑盒”、另一边写成“完全透明”，没有分析价值。更准确的区别是：成品型 Agent 由厂商维护一套主张明确的默认闭环；dsh 把闭环拆成可替换服务，并要求使用方承担组合后的系统行为。</p>
+
+  <table class="compare">
+    <thead><tr><th>维度</th><th>DeepSeek Harness</th><th>成品型 Coding Agent</th></tr></thead>
+    <tbody>
+      <tr><td>模型绑定</td><td>原生 DeepSeek 适配器，也可通过 <code>llm-pi-ai</code> 配置多供应商或 OpenAI-compatible 私有端点。</td><td>通常围绕厂商模型优化；有些产品支持第三方模型或网关，但由产品接口决定范围。</td></tr>
+      <tr><td>Loop</td><td>默认 loop 是插件 seam，可替换，但必须实现完整 Agent 契约。</td><td>核心 loop 通常由产品方控制，用户通过 hooks、instructions、skills 等扩展。</td></tr>
+      <tr><td>工具与 MCP</td><td>统一进入 <code>ctx.tools</code>，工具流水线、呈现模式和 MCP bridge 都可组合。</td><td>工具体验更统一，公开扩展点之外的调度细节通常不可替换。</td></tr>
+      <tr><td>多 Agent</td><td>本地 spawn/fork 与可选 Claude Code、Codex provider 共用委托接口。</td><td>产品自带的子 Agent 通常有更完整的内部状态与 UI；跨产品协作需要外部编排。</td></tr>
+      <tr><td>调试</td><td>事件日志、Trajectory、配置 dump 与源码可查，适合研究请求和状态演进。</td><td>日志和诊断更产品化，但内部实现可见度取决于开源程度与官方接口。</td></tr>
+      <tr><td>升级成本</td><td>RC 阶段接口会破坏；插件、patch 和 preset 的组合需要自己验证。</td><td>厂商吸收大部分内部迁移，用户主要处理公开配置与扩展 API 的变化。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="decision-tree"><strong>选型速查</strong>
+
+只想把编码任务做完？
+└─ 先用 Claude Code、Codex、Cursor 一类成品。别为了换一个模型，先养一棵插件树。
+
+要把 Agent 嵌进内部 CI、审查平台或私有云？
+└─ dsh 值得试。你需要的正是模型、Loop、工具和 UI 之间那些可替换的 seam。
+
+流程固定、审计要求高？
+└─ 先写 Workflow。不要因为 dsh 能换 Loop，就把每个审批流程都做成自由 Agent。
+
+准备在生产环境执行不可信任务？
+└─ 两边都要外置隔离。容器或 microVM 负责边界，默认文件沙箱只算其中一层。</div>
+
+  <section class="case">
+    <h3>场景一：切到本地 OpenAI-compatible 模型</h3>
+    <p><code>llm-pi-ai</code> 允许声明一个仓库内置目录没有的 provider route，指定协议、端点与模型。Ollama 提供 OpenAI-compatible 接口，因此可以按私有网关方式接入。整个切换走的是通用适配层，dsh 没有为 Ollama 维护专用分支。</p>
+    <pre><code>- id: llm-local
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      local-ollama:
+        displayName: Local Ollama
+        api: openai-completions
+        baseURL: http://127.0.0.1:11434/v1
+        apiKeyEnv: OLLAMA_API_KEY
+        models:
+          - id: qwen3-coder
+            contextWindow: 131072
+            maxTokens: 16384</code></pre>
+    <p>本地端点如果不校验 Bearer token，也可能仍要求放一个占位 key，因为通用 OpenAI 客户端会检查凭据。模型的 context window、输出上限和图像能力也要按实际部署填写；配置错了，Harness 无法替本地服务猜出来。</p>
+  </section>
+
+  <section class="case">
+    <h3>场景二：私有工具链加自定义 Loop</h3>
+    <p>先把私有能力做成 Tool 或 Service Provider，保留默认 loop，通常已经足够。只有任务停止条件、调度语义或多轮状态机确实不同，才值得替换 <code>ctx.agentLoop</code>。比如合规审查必须固定经过“证据收集—规则判定—人工签字”三段，外层 Workflow 往往比自由探索的新 loop 更好审计。</p>
+    <p>直接改 loop 最容易破坏的是错误恢复：工具已经产生副作用、日志还没写完时进程崩溃，新的驱动器必须知道下一次是重试、验证还是停止。把 happy path 跑通，只完成了这项工作的前半截。</p>
+  </section>
+
+  <h2 id="limits">Developer Preview 的成本，远不止 API 改名</h2>
+
+  <p><strong>第一，组合空间会迅速膨胀。</strong>模型适配器、preset、工具呈现、沙箱后端和 UI 都能替换后，测试矩阵不再是一条版本线。某个插件单独通过测试，不代表它与另一个 realm、patch 顺序或 HMR 生命周期组合后仍然正确。</p>
+
+  <p><strong>第二，可追溯不等于可复现。</strong>事件日志能够解释当时发出了什么请求、调用了什么工具；外部网页变了、模型版本更新了、命令读取了当前时间，结果仍然会漂移。严格复现实验还需要固定模型、工具输入、环境镜像和外部依赖。</p>
+
+  <p><strong>第三，生态治理还没经受规模压力。</strong>“万物皆插件”走到规模化之后，难题会从写插件转向签名、权限清单、依赖冲突、恶意升级、兼容区间和维护者失联。现在的 <code>dsh-plugin</code> topic 只能帮助发现项目，尚不是带审查和权限模型的插件市场。</p>
+
+  <p><strong>第四，如果你只想找个开箱即用的编码工具，先别碰这套 Harness。</strong>Profile、Bundle、Patch、Host plane、Agent plane、scope、realm、service seam 任何一层放错位置，表现都可能像“插件没有加载”。省下来的厂商限制，会在插件冲突、版本断层和组合测试里找你结账。对平台团队这是控制权；对普通用户，大多只是额外维护。</p>
+
+  <div class="verdict">
+    <p><strong>我的判断：</strong>DeepSeek Harness 还称不上 Agent 的“安卓时刻”。Android 的成立不仅靠可替换组件，还靠稳定 API、硬件抽象、应用分发、安全模型和足够大的开发者市场。dsh 现在更像一颗设计得很认真的 Agent 微内核：它证明了 loop、工具、日志、沙箱和 UI 可以在同一插件模型下协作，也把过去很难触碰的控制面交给了开发者。</p>
+    <p>这已经足够重要。若后续 seam 保持稳定，第三方 provider 与 preset 能跨版本存活，安全边界经得住生产部署，它可能成为领域 Agent 的底座。若生态只剩不断复制整份 YAML、追逐 RC 接口和修复插件冲突，“万物皆插件”也可能退化成“万物都要自己维护”。分水岭不在开源当天，而在两年后旧插件还能不能装、新版本敢不敢升。</p>
+  </div>
+
+  <h2>参考资料</h2>
+
+  <ul class="sources">
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer">DeepSeek Harness 官方仓库与 README</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.zh.md" target="_blank" rel="noopener noreferrer">DeepSeek Harness 架构说明</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.zh.md" target="_blank" rel="noopener noreferrer">Cordis 入门：服务、事件与可逆副作用</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/postmortem/0001-acp-default-export-drops-inject.zh.md" target="_blank" rel="noopener noreferrer">Postmortem 0001：default export 丢失 inject</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/postmortem/0004-landlock-partial-notice-misclassified-child-failures.zh.md" target="_blank" rel="noopener noreferrer">Postmortem 0004：Landlock 提示导致错误归因</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/code-runtime/code-runtime-worker-thread" target="_blank" rel="noopener noreferrer">PTC Worker Thread runtime 的执行边界与已知限制</a></li>
+    <li><a href="https://github.com/cordiverse/paper/blob/main/paper.pdf" target="_blank" rel="noopener noreferrer">A Programming Paradigm for Spatiotemporal Composability</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/sandbox.zh.md" target="_blank" rel="noopener noreferrer">dsh 进程沙箱设计</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp/mcp-client" target="_blank" rel="noopener noreferrer">MCP Client 插件实现与限制</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-codex" target="_blank" rel="noopener noreferrer">Codex 子 Agent provider</a></li>
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/subagent/subagent-claude-code" target="_blank" rel="noopener noreferrer">Claude Code 子 Agent provider</a></li>
+    <li><a href="https://docs.ollama.com/openai" target="_blank" rel="noopener noreferrer">Ollama 的 OpenAI compatibility 文档</a></li>
+  </ul>
+</div>
