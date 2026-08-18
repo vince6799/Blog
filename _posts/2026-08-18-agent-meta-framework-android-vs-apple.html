@@ -1,0 +1,190 @@
+---
+layout: post
+title: "从“套壳 App”到“Agent 元框架”：AI 编程领域的“安卓 vs 苹果”之争"
+description: "从模型、Agent runtime、产品、协议与基础设施五层拆解 AI 编程产业，分析 Claude Code、Codex、DeepSeek Harness 与 Pi 背后的集成路线、开放路线和单位任务成本。"
+category: 行业观察
+reading_time: 约 28 分钟阅读
+permalink: /articles/agent-meta-framework-android-vs-apple/
+---
+<style>
+.agent-stack-article .article-note{margin:30px 0;padding:18px 21px;border-left:3px solid #9db6a6;background:rgba(255,255,255,.4);color:#405049;font-size:14px}.agent-stack-article .toc{margin:36px 0 44px;padding:22px 25px;border:1px solid #d7dcd6;background:#fffefa}.agent-stack-article .toc strong{display:block;margin-bottom:10px;font:700 19px Georgia,"Songti SC",serif}.agent-stack-article .toc ol{margin:0;padding-left:1.3em;columns:2;column-gap:34px}.agent-stack-article .toc li{margin:.3em 0;break-inside:avoid}.agent-stack-article .toc a{text-decoration:none;font-size:14px}.stack-map{margin:34px 0;border:1px solid #d7dcd6;background:#fffefa}.stack-row{display:grid;grid-template-columns:150px 1fr 1.1fr;border-bottom:1px solid #d7dcd6}.stack-row:last-child{border-bottom:0}.stack-row>div{padding:16px 18px}.stack-row .layer{background:#e7efe9;color:#174b33;font-weight:800}.stack-row .job{border-left:1px solid #d7dcd6;border-right:1px solid #d7dcd6}.stack-row small{color:#68736d;line-height:1.55}.compare,.cost-table{width:100%;margin:28px 0;border-collapse:collapse;background:#fffefa;font-size:14px}.compare th,.compare td,.cost-table th,.cost-table td{padding:13px 14px;border:1px solid #d7dcd6;text-align:left;vertical-align:top}.compare th,.cost-table th{background:#e7efe9}.equation{margin:24px 0;padding:18px 20px;border-left:3px solid #16724a;background:#f2f6f3;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}.warning{margin:28px 0;padding:18px 21px;border-left:3px solid #c08a46;background:#fff7e9}.agent-stack-article .sources li{margin:.75em 0}@media(max-width:760px){.agent-stack-article .toc ol{columns:1}.stack-row{grid-template-columns:1fr}.stack-row .job{border:0;border-top:1px solid #d7dcd6;border-bottom:1px solid #d7dcd6}.table-scroll{overflow-x:auto}.compare,.cost-table{min-width:720px}}
+</style>
+
+<div class="agent-stack-article">
+  <p>AI 编程产品早期确实很像“模型加编辑器”：左边是代码，右边是聊天框，产品差异主要来自索引、提示词和交互设计。把这一阶段统称为“套壳”有些粗糙。Cursor 的上下文检索、补丁应用和编辑体验本身就是工程能力，只是那时模型很少持续控制终端，也不必为一个任务保存几十轮工具调用的状态。</p>
+
+  <p>2026 年的 Coding Agent 已经是另一种软件。一次跨模块重构会经过仓库扫描、方案选择、文件修改、测试失败、重新定位、再次修改和 Git 交付。中间任何一步都可能被限流、权限拒绝或进程崩溃。模型仍然重要，但真正把任务跑完的是模型外面的那套运行系统。</p>
+
+  <p>这也带来一个很诱人的类比：Claude Code、Codex 像 iOS，追求模型与产品的垂直整合；DeepSeek Harness 像 Android，把底层能力开放给设备厂商和开发者。这个比喻能解释一部分商业冲突，却不能当作产业结论。Codex CLI 本身采用 Apache-2.0 许可，Pi 同时是开源 harness 和可直接使用的终端产品，DeepSeek Harness 则还处于 Developer Preview。现实比“闭源对开源”多了好几层。</p>
+
+  <aside class="article-note"><strong>核对说明：</strong>本文资料核对于 2026 年 8 月 18 日。文中的产品能力与价格来自各项目官方仓库或官方文档。成本表是统一假设下的静态演算，不是作者实际运行了 35 分钟、消费 2000 万 Token 的测试报告。DeepSeek Harness 仍明确提示会发生破坏性变更。</aside>
+
+  <nav class="toc" aria-label="文章目录">
+    <strong>本文目录</strong>
+    <ol>
+      <li><a href="#shell">“套壳时代”结束了吗</a></li>
+      <li><a href="#stack">现代 Agent 技术栈</a></li>
+      <li><a href="#harness">Harness 在控制什么</a></li>
+      <li><a href="#business">两种商业路线</a></li>
+      <li><a href="#limits">安卓与苹果类比的漏洞</a></li>
+      <li><a href="#economics">单位任务账本</a></li>
+      <li><a href="#future">基础设施会走向哪里</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="shell">“套壳时代”结束了吗</h2>
+
+  <p>单行补全的控制流很短：收集光标附近的文本，请求模型，显示候选。对话式编辑多了代码库检索和补丁应用，但大部分操作仍由人发起。Agent 把主动权向前推进了一步。用户给出目标后，它可以连续选择工具，直到得到可验证结果或触发人工审批。</p>
+
+  <p>这段循环看起来不复杂：</p>
+
+  <pre><code>while (!done) {
+  context = buildContext(session, repository, tools)
+  response = await model.generate(context)
+
+  if (response.toolCalls.length === 0) break
+  results = await executeWithPolicy(response.toolCalls)
+  session.append(response, results)
+}</code></pre>
+
+  <p>生产系统的难点全在省略处。哪些文件进入上下文？并发工具结果按什么顺序写回？命令可以访问哪些目录和凭据？上下文快满时如何压缩？进程中断后从哪一步恢复？子 Agent 修改同一文件怎么办？模型调用只是循环的一环。</p>
+
+  <p>因此，“套壳”没有消失，而是壳变厚了。它从一个界面变成了控制面。产品竞争也从谁能更顺地调用模型，扩大到谁能更可靠地管理状态、工具、权限和成本。</p>
+
+  <h2 id="stack">先把现代 AI 编程技术栈分开</h2>
+
+  <p>常见的四层图会把 API 网关与协议放在一起，把云沙箱藏在产品层里。实际部署时，这会让责任边界变得含糊。更稳妥的画法是五层：</p>
+
+  <figure class="stack-map">
+    <div class="stack-row"><div class="layer">5. 产品与界面</div><div class="job">接收目标、展示 diff、管理任务与审批</div><div><small>Claude Code、Codex、Pi Coding Agent、DeepSeek Harness Web UI</small></div></div>
+    <div class="stack-row"><div class="layer">4. Agent Runtime</div><div class="job">上下文、loop、会话、工具、子 Agent、恢复</div><div><small>Claude Code/Codex 内部 runtime、DeepSeek Harness、Pi Agent Core</small></div></div>
+    <div class="stack-row"><div class="layer">3. 协议与适配</div><div class="job">统一工具、模型与外部 Agent 的连接方式</div><div><small>MCP、ACP、模型 provider adapter、Function Calling</small></div></div>
+    <div class="stack-row"><div class="layer">2. 执行基础设施</div><div class="job">终端、容器、微型虚拟机、网络、凭据与审计</div><div><small>本机 shell、云端 sandbox、企业 runner、API gateway</small></div></div>
+    <div class="stack-row"><div class="layer">1. 模型</div><div class="job">生成计划、代码、工具请求与判断</div><div><small>DeepSeek-V4、Claude 5/4.x、GPT-5.x/Codex 模型、本地模型</small></div></div>
+  </figure>
+
+  <p>同一个项目可能跨越多层。Pi 仓库同时提供多供应商模型接口、Agent core、TUI 与 Coding Agent CLI；DeepSeek Harness 自带 Web UI，却把 UI、loop 和模型适配器都视作可替换插件。Claude Code 和 Codex 也是完整产品，但各自公开了 MCP、Skills、Hooks、SDK 或开源 CLI 等不同深度的扩展面。</p>
+
+  <p>这里还要纠正一个名称混淆。<a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">Pi Agent</a> 是开源 Agent harness；<a href="https://github.com/can1357/oh-my-pi" target="_blank" rel="noopener noreferrer">Oh My Pi</a> 是从 Pi 分叉并扩展出来的 Coding Agent，不是 API 中转网关。网关是独立基础设施，可能提供 OpenAI 或 Anthropic 兼容端点，但不能用某个客户端的名字代替。</p>
+
+  <h2 id="harness">Harness 到底在控制什么</h2>
+
+  <p>模型收到一组消息，返回文字或工具调用。Harness 负责让这段无状态接口具备持续工作的能力。可以把它拆成六项职责：</p>
+
+  <ol>
+    <li><strong>上下文构建：</strong>组合系统提示、项目规则、历史消息、文件片段和工具 schema。</li>
+    <li><strong>控制循环：</strong>决定何时再次请求模型，何时并发工具，何时停止或转交人工。</li>
+    <li><strong>状态与恢复：</strong>记录 turn、tool result、文件变更和任务状态，处理中断与重试。</li>
+    <li><strong>执行与权限：</strong>把模型请求变成 shell、文件、浏览器或外部系统操作，并实施审批与隔离。</li>
+    <li><strong>可观测性：</strong>记录 Token、缓存、延迟、失败原因与执行轨迹。</li>
+    <li><strong>编排：</strong>把工作拆给不同模型或 Agent，再合并结果并处理冲突。</li>
+  </ol>
+
+  <p>DeepSeek Harness 的辨识度来自 Cordis。模型传输、工具表、Agent loop、会话、权限、沙箱和 UI 都进入插件树，Profile、Bundle 与 patch 决定一次运行实际装载什么。官方口号是 “Everything is a Plugin”。这使平台团队可以替换默认实现，也意味着依赖图、插件兼容和供应链安全转移给部署者。</p>
+
+  <p>“能调度 Claude Code 或 Codex”也需要写得具体。dsh 可以通过子 Agent provider 和 ACP 等接口接入外部 Agent；目标程序仍需提供可用协议，认证、许可、工作目录和权限也要单独配置。元框架不会凭空获得第三方产品的内部能力。</p>
+
+  <h2 id="business">两种商业路线争的是什么</h2>
+
+  <h3>集成路线：把默认体验做到足够稳定</h3>
+
+  <p>Claude Code 与 Codex 的优势来自模型、提示、工具、权限和交互面的共同迭代。产品团队知道模型即将怎样变化，可以提前调整工具 schema、压缩策略与 UI。用户安装后不需要先选择 Agent loop，也不用决定会话日志该采用什么事件词汇。</p>
+
+  <p>这种路线的商业价值不只是锁定模型收入。统一默认值降低了支持成本：厂商可以复现问题、灰度升级、集中修复安全漏洞，并把终端、IDE、桌面和云端任务连成同一套账号与策略系统。企业购买的往往是这份可预测性。</p>
+
+  <p>代价同样清楚。官方体验围绕本厂模型和账号设计；模型升级、限额和价格由供应商决定。即使支持 Bedrock、Vertex AI 或 Foundry，解决的主要是采购、区域与云治理，Claude Code 使用的仍是 Claude 模型。Codex CLI 虽然开源，OpenAI 官方体验也仍围绕 Codex/OpenAI 模型与服务。</p>
+
+  <h3>组合路线：把选择权交给运行平台</h3>
+
+  <p>DeepSeek Harness 和 Pi 代表两种程度不同的组合路线。dsh 几乎把整个 runtime 都变成插件；Pi 提供小而完整的默认循环，再通过 TypeScript extensions、Skills、packages、SDK 与 RPC 扩展。部署者可以把便宜模型用于搜索和整理，把高能力模型留给架构判断或最终复核。</p>
+
+  <p>对企业平台团队，开放 runtime 的价值在于能接入现有身份、审计、沙箱和模型网关。敏感代码可以留在指定网络，工具权限可以与内部策略引擎对接，模型也能按任务类型路由。软件许可免费不代表总体拥有成本低：插件升级、故障恢复、安全评审、评测集和推理集群都需要工程团队维护。</p>
+
+  <div class="table-scroll"><table class="compare">
+    <thead><tr><th>商业问题</th><th>集成产品</th><th>开放 runtime</th></tr></thead>
+    <tbody>
+      <tr><td>谁选择默认模型和 loop</td><td>产品厂商</td><td>部署者或发行版维护者</td></tr>
+      <tr><td>升级兼容由谁消化</td><td>主要由厂商处理</td><td>框架、插件作者与部署团队共同承担</td></tr>
+      <tr><td>安全边界</td><td>内置审批、沙箱与企业策略</td><td>可以深度定制，但必须验证最终组合</td></tr>
+      <tr><td>收入来源</td><td>订阅、API、企业席位与云任务</td><td>模型调用、托管、支持、集成与内部平台价值</td></tr>
+      <tr><td>迁移成本</td><td>工作流越深入，迁移越难</td><td>接口较开放，但插件与配置也会形成新的锁定</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 id="limits">“安卓 vs 苹果”类比在哪里失效</h2>
+
+  <p>Android 当年有稳定的设备抽象、庞大的应用分发体系和明确的兼容目标。Agent runtime 还没有到这个阶段。MCP 主要解决工具与数据连接，ACP 处理 Agent 与编辑器或宿主的交互；它们没有统一上下文压缩、会话恢复、权限语义和评测标准。一个 dsh 插件也不一定能装进 Pi、Codex 或 Claude Code。</p>
+
+  <p>第二个差别是模型与 runtime 的耦合比手机应用与操作系统更深。不同模型对工具描述、错误恢复、并行调用和长上下文的反应并不一致。把 Claude 换成一个本地模型，API 请求可能成功，任务完成率却可能明显变化。所谓“模型解耦”首先是接口层事实，不是效果层保证。</p>
+
+  <p>第三，市场没有证据支持“开发者正在整体迁往元框架”这种强结论。闭环产品也在增加 MCP、Hooks、Skills、SDK 和多 Agent；开源框架也会形成自己的默认发行版、插件市场和托管服务。更可能出现的格局是相互借鉴：产品开放更多 seam，框架提供更完整的预设。</p>
+
+  <div class="warning"><strong>这场竞争不是自由与封闭的道德判断。</strong>它讨论的是默认能力由谁负责、故障成本由谁承担、平台团队是否有能力维护自己的组合。小团队选择成熟产品可能更便宜；拥有合规和推理基础设施的大企业，才更容易从开放 runtime 获得规模收益。</div>
+
+  <h2 id="economics">复杂工程的单位任务账本</h2>
+
+  <p>Agent 的费用不能只用“每百万 Token 单价”比较。一次任务的输入会在每个 turn 重新携带系统提示、工具定义、项目规则、历史消息和工具结果。缓存命中、输出长度、失败重试、子 Agent 并发和超长上下文加价都会改变账单。</p>
+
+  <div class="equation">任务成本 ≈ 未缓存输入 × 输入价
+         + 缓存写入 × 写入价
+         + 缓存读取 × 命中价
+         + 输出 Token × 输出价
+         + 工具 / 沙箱 / 网关 / 本地算力
+         + 失败重试与并发冗余</div>
+
+  <h3>用同一份假设算一次</h3>
+
+  <p>下面不是实测。为了看清价格结构，假设一个长任务累计产生 <strong>2000 万输入 Token、20 万输出 Token</strong>，其中 95% 输入命中缓存；暂不计首次缓存写入、网关、沙箱和工具费用。价格采用 2026 年 8 月 18 日官方页面：GPT-5.3-Codex 输入 / 缓存输入 / 输出为 $1.75 / $0.175 / $14 每百万 Token；Claude Sonnet 4.6 为 $3 / $0.30 / $15；DeepSeek-V4-Pro 为 $0.435 / $0.003625 / $0.87。</p>
+
+  <div class="table-scroll"><table class="cost-table">
+    <thead><tr><th>模型</th><th>完全不命中缓存</th><th>95% 输入命中</th><th>此假设下降幅</th></tr></thead>
+    <tbody>
+      <tr><td>GPT-5.3-Codex</td><td>$37.80</td><td>$7.88</td><td>约 79%</td></tr>
+      <tr><td>Claude Sonnet 4.6</td><td>$63.00</td><td>$11.70</td><td>约 81%</td></tr>
+      <tr><td>DeepSeek-V4-Pro</td><td>$8.87</td><td>$0.68</td><td>约 92%</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>计算过程以 GPT-5.3-Codex 为例：100 万未命中输入是 $1.75，1900 万缓存输入是 $3.325，20 万输出是 $2.80，合计 $7.875。这里没有加入缓存写入费用；不同供应商的写入计价和 TTL 不同，生产账单必须单独记录。</p>
+
+  <p>这张表只能说明价格函数，不能证明三个模型完成了同一质量的工作。如果便宜模型多重试十次、改坏仓库或需要工程师接管，单位 Token 优势会迅速消失。相反，高价模型若用更少 turn 完成任务，总价未必更高。真正应比较的是“通过验收的任务成本”。</p>
+
+  <h3>缓存为何能省钱，也为何经常失效</h3>
+
+  <p>Claude Code 官方文档给出了很清楚的机制：每轮都会重发系统提示、项目上下文、历史消息和工具结果；缓存按请求前缀精确匹配。切换模型、连接或断开 MCP Server、压缩会话、升级 Claude Code 都可能让下一轮重新计算部分或全部前缀。缓存位于实际提供模型的基础设施中；接自定义网关后，是否仍然支持缓存取决于网关如何转发。</p>
+
+  <p>Anthropic 的缓存读取价格是基础输入价的 0.1 倍；OpenAI 官方 GPT-5.3-Codex 页面同样列出 0.1 倍的缓存输入价。DeepSeek-V4-Pro 当前缓存命中价与未命中价差距更大。于是“输入成本下降 80% 到 90%”在高命中、输出占比不高的特定任务中完全可能，但它不是所有 Agent 账单的固定折扣。</p>
+
+  <h3>网关不是无风险套利</h3>
+
+  <p>API gateway 可以统一认证、路由、预算和供应商切换，也能把简单任务送给便宜模型。它同时成为代码、提示、工具结果和密钥流经的新节点。兼容端点还可能丢失缓存字段、推理内容、取消语义或工具调用细节。价格套利必须扣除网关费、失败重试、运维和数据治理成本。</p>
+
+  <p>合理的成本面板至少要记录：任务成功率、人工接管次数、输入与输出 Token、缓存写入与读取、模型调用次数、重试、并发 Agent 数、端到端时长和最终 diff。只报一个 95% Cache Hit Rate，无法判断任务是否值得。</p>
+
+  <h2 id="future">Agent 基础设施会走向哪里</h2>
+
+  <h3>多 Agent 会先成为调度问题</h3>
+
+  <p>未来不会由一个 Agent 包办所有工作，但也不会因为进程数量增加就自动变好。代码搜索、测试调查和文档核对可以并行；数据库迁移与调用方修改则共享语义状态，需要明确顺序和集成验证。元框架的价值将更多体现在预算、隔离、依赖和冲突管理，而不是“同时启动十个 Agent”的演示。</p>
+
+  <h3>代码会承载一部分控制流</h3>
+
+  <p>工具密集型任务正在从逐轮自然语言决策转向可执行程序：模型生成一段受限代码，在其中组合搜索、读取和数据处理，只在需要新判断时返回模型。DeepSeek Harness 的 PTC 模式和 OpenAI 的 Programmatic Tool Calling 都体现了这个方向。收益是减少模型往返和中间 Token；风险是控制流错误会从一条工具调用扩大成一段程序错误。</p>
+
+  <h3>企业最终要维护自己的 Agent policy</h3>
+
+  <p>成熟部署需要一套与模型无关的规则：哪些仓库可以写、哪些命令必须审批、网络能访问哪里、凭据怎样注入、生成代码必须通过哪些检查、会话保留多久、出现异常由谁接管。这套 policy 可以挂在闭环产品的企业控制面，也可以由开放 runtime 实现。它比选中某个模型更接近长期资产。</p>
+
+  <p>所以，“大模型决定上限，元框架决定下限”仍然说得太满。模型、runtime、执行基础设施和组织流程共同决定结果。开放框架扩大了企业可以控制的范围，集成产品降低了企业必须控制的范围。接下来真正值得观察的，不是哪一方赢得口号，而是谁能把可验证的任务完成率、权限边界和单位任务成本同时做稳。</p>
+
+  <h2>参考资料</h2>
+  <ul class="sources">
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer">DeepSeek Harness 官方仓库</a>：Cordis、插件架构、Developer Preview 与 MIT 许可。</li>
+    <li><a href="https://api-docs.deepseek.com/quick_start/pricing" target="_blank" rel="noopener noreferrer">DeepSeek API Models &amp; Pricing</a>：DeepSeek-V4-Pro 的缓存命中、未命中与输出价格。</li>
+    <li><a href="https://code.claude.com/docs/en/prompt-caching" target="_blank" rel="noopener noreferrer">Claude Code Prompt Caching</a>：请求前缀、缓存失效条件、TTL 与网关边界。</li>
+    <li><a href="https://platform.claude.com/docs/en/about-claude/pricing" target="_blank" rel="noopener noreferrer">Claude Platform Pricing</a>：Sonnet 4.6 与缓存读写价格。</li>
+    <li><a href="https://developers.openai.com/api/docs/models/gpt-5.3-codex" target="_blank" rel="noopener noreferrer">OpenAI Docs：GPT-5.3-Codex</a>：模型定位、上下文与 API Token 价格。</li>
+    <li><a href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex 官方仓库</a>：CLI 的产品定位与 Apache-2.0 许可。</li>
+    <li><a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">Pi Agent Harness 官方仓库</a>：模型接口、Agent core、Coding Agent 与权限边界。</li>
+  </ul>
+</div>
