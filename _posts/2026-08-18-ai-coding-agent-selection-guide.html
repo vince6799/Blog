@@ -1,0 +1,156 @@
+---
+layout: post
+title: "2026 AI 编程 Agent 选型指南：DeepSeek Harness、Claude Code、Codex、Pi Agent 该选谁？"
+description: "从产品完成度、模型自由度、扩展方式、权限边界与成本治理出发，对比 DeepSeek Harness、Claude Code、OpenAI Codex 和 Pi Agent，并给出可落地的选型建议。"
+category: AI 工程
+reading_time: 约 24 分钟阅读
+permalink: /articles/2026-ai-coding-agent-selection-guide/
+---
+<style>
+.agent-guide .article-note{margin:30px 0;padding:18px 21px;border-left:3px solid #9db6a6;background:rgba(255,255,255,.38);color:#405049;font-size:14px}.agent-guide .toc{margin:36px 0 44px;padding:22px 25px;border:1px solid #d7dcd6;background:#fffefa}.agent-guide .toc strong{display:block;margin-bottom:10px;font:700 19px Georgia,"Songti SC",serif}.agent-guide .toc ol{margin:0;padding-left:1.3em;columns:2;column-gap:34px}.agent-guide .toc li{margin:.3em 0;break-inside:avoid}.agent-guide .toc a{text-decoration:none;font-size:14px}.matrix-wrap{margin:32px 0;overflow-x:auto;border:1px solid #d7dcd6}.matrix{width:100%;min-width:980px;border-collapse:collapse;background:#fffefa;font-size:13px}.matrix th,.matrix td{padding:13px 14px;border-right:1px solid #d7dcd6;border-bottom:1px solid #d7dcd6;text-align:left;vertical-align:top}.matrix th{background:#e7efe9;color:#173d2c}.matrix tr:last-child td{border-bottom:0}.matrix th:last-child,.matrix td:last-child{border-right:0}.matrix td:first-child{width:112px;font-weight:700;color:#33463d}.scenario{margin:34px 0}.scenario h3{margin-bottom:12px}.scenario .pick{color:#0e5134;font-size:13px;font-weight:800}.warning{margin:28px 0;padding:18px 21px;border-left:3px solid #c08a46;background:#fff7e9}.warning strong{color:#76501f}.agent-guide .sources li{margin:.75em 0}@media(max-width:760px){.agent-guide .toc ol{columns:1}}
+</style>
+
+<div class="agent-guide">
+  <p>2026 年，代码补全和 Coding Agent 已经是两类工具。前者主要在编辑器里续写代码；后者会读取仓库、调用终端、修改多个文件、运行测试，并把改动交给 Git。Copilot、Cursor 式补全仍有用途，但本文讨论的是后一类。</p>
+
+  <p>四个项目的产品边界不同。Claude Code 与 Codex 可以安装后直接工作；Pi 提供一套较小的默认 Agent，也保留 SDK 和扩展接口；DeepSeek Harness 把模型适配器、工具、Agent loop、会话和 UI 都放进插件系统。选型时除了代码质量，还得确认运行时由谁维护、权限在哪里控制、模型能否替换，以及升级失败后由谁收拾。</p>
+
+  <aside class="article-note"><strong>核对基线：</strong>本文资料核对于 2026 年 8 月 18 日。DeepSeek Harness 仍处于 Developer Preview，并明确提示会有破坏性变更；Pi 已迁移至 Earendil Works。本文讨论的是 <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer">DeepSeek 官方 dsh</a>、<a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener noreferrer">Claude Code</a>、<a href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex</a> 与 <a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">Pi Agent Harness</a>。快速演进的版本、套餐和模型清单应以购买或部署当日的官方页面为准。</aside>
+
+  <nav class="toc" aria-label="文章目录">
+    <strong>本文目录</strong>
+    <ol>
+      <li><a href="#camps">四种产品边界</a></li>
+      <li><a href="#matrix">核心对比矩阵</a></li>
+      <li><a href="#codex">场景 A：Codex</a></li>
+      <li><a href="#claude">场景 B：Claude Code</a></li>
+      <li><a href="#dsh">场景 C：DeepSeek Harness</a></li>
+      <li><a href="#pi">场景 D：Pi Agent</a></li>
+      <li><a href="#gateway">网关与成本治理</a></li>
+      <li><a href="#decision">选型结论</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="camps">先分清四个项目交付了什么</h2>
+
+  <p>“Coding Agent”这个名称覆盖得太宽。对个人开发者，安装后能否直接修复代码最重要；对平台团队，更重要的可能是能否更换 loop、接入内部权限系统，或者统一调度已有工具。下面先按实际交付物拆开。</p>
+
+  <ul>
+    <li><strong>Claude Code：</strong>Anthropic 提供的端到端产品。终端、IDE、桌面和 Web 共用同一套引擎，模型、权限、会话与扩展机制一起演进。</li>
+    <li><strong>OpenAI Codex：</strong>横跨本地 CLI、IDE、桌面与云端任务的产品体系。CLI 代码以 Apache-2.0 开源，但服务、账号额度和官方模型仍属于 OpenAI 产品生态。</li>
+    <li><strong>DeepSeek Harness：</strong>用 Cordis 组合模型、工具、loop、会话、沙箱与 UI 的元框架。默认产品可以直接运行，但架构价值主要来自替换这些部件。</li>
+    <li><strong>Pi Agent：</strong>默认只有读、写、编辑与 Bash 等核心工具的终端 Agent，同时提供 TypeScript SDK、RPC、扩展、Skills 与 packages。项目把复杂能力留给用户按需安装，不放进默认发行版。</li>
+  </ul>
+
+  <p>Claude Code 和 Codex 的默认配置最多，团队较少碰运行时内部。dsh 暴露的部件最多，使用方也要承担更多集成与兼容工作。Pi 位于中间：默认循环可以直接用，缺少的能力再通过扩展补上。</p>
+
+  <h2 id="matrix">核心对比矩阵</h2>
+
+  <div class="matrix-wrap" role="region" aria-label="四款 AI 编程 Agent 横向对比" tabindex="0">
+    <table class="matrix">
+      <thead><tr><th>对比维度</th><th>Claude Code</th><th>OpenAI Codex</th><th>DeepSeek Harness（dsh）</th><th>Pi Agent</th></tr></thead>
+      <tbody>
+        <tr><td>代码与协议</td><td>商业产品；可扩展接口公开，不等于产品整体开源</td><td>CLI 为 Apache-2.0 开源；云端服务仍是商业产品</td><td>MIT；官方完整仓库开源</td><td>MIT；Agent、TUI、模型适配层均在仓库中</td></tr>
+        <tr><td>主要定位</td><td>端到端 AI 编程产品</td><td>本地与云端协同的 OpenAI 编程 Agent</td><td>Agent 运行与编排元框架</td><td>轻量、可塑的终端 Agent harness</td></tr>
+        <tr><td>模型路线</td><td>Claude 模型；CLI/VS Code 可经 Bedrock、Vertex AI、Foundry 等渠道使用</td><td>官方体验围绕 OpenAI/Codex 模型；CLI 可配置 provider，但兼容性需自行验证</td><td>适配器化，可接 API、兼容端点或本地服务</td><td>统一多供应商接口，支持自定义 provider 与本地兼容端点</td></tr>
+        <tr><td>扩展方式</td><td>MCP、Skills、Hooks、插件、Agent SDK、Agent teams</td><td>MCP、Skills、项目指令、Automations、SDK/CLI 集成</td><td>模型、工具、loop、会话、权限、UI 都可作为 Cordis 插件组合；支持子 Agent</td><td>TypeScript extensions、Skills、prompt templates、Pi packages、SDK/RPC</td></tr>
+        <tr><td>交互面</td><td>Terminal、VS Code/JetBrains、Desktop、Web</td><td>Terminal、IDE、Desktop、Web/云端任务</td><td>本地 Web UI（默认 <code>127.0.0.1:3080</code>）、CLI/headless、SDK</td><td>Terminal TUI；可通过 SDK、RPC、ACP 嵌入其他界面</td></tr>
+        <tr><td>权限与隔离</td><td>内置权限模式与企业管控；云厂商部署不等于 Claude Code 自托管</td><td>本地沙箱、审批与企业配置；云端任务使用隔离环境</td><td>权限、审批和沙箱可组合，但 preset 不是固定“四级权限”；部署者要验证最终插件树</td><td>默认继承启动用户权限；强隔离需容器、微型虚拟机或外部策略沙箱</td></tr>
+        <tr><td>学习曲线</td><td>低；高级企业治理为中等</td><td>低；深度配置为中等</td><td>中到高；要理解 Profile、Bundle、Patch、Cordis 与 Host/Agent plane</td><td>低；写复杂 extension 时升至中等</td></tr>
+        <tr><td>成本结构</td><td>订阅或 API/云渠道计费，长任务容易触及额度</td><td>ChatGPT 套餐额度或 API 计费，受账号层级与 rate limit 影响</td><td>软件免费；成本来自模型、推理基础设施、存储与运维</td><td>软件免费；主要取决于所选模型与本地算力</td></tr>
+        <tr><td>主要风险</td><td>模型与商业策略集中于 Anthropic 生态</td><td>官方体验与 OpenAI 账号、模型和额度紧密耦合</td><td>Developer Preview 的兼容性、插件供应链与自运维成本</td><td>默认安全边界较薄；复杂能力需要自己选扩展并治理</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>这里有两个容易写错的细节。Codex CLI 使用 Apache-2.0 许可，但这不代表 Codex 云端服务可以私有化部署。dsh 和 Pi 能连接多种模型，也不代表模型可以无损互换：工具调用格式、上下文压缩、缓存策略和代码质量仍要逐项测试。</p>
+
+  <h2>场景落地：你到底需要哪一款？</h2>
+
+  <section class="scenario" id="codex">
+    <span class="pick">场景 A：选 Codex</span>
+    <h3>依赖 OpenAI 生态，希望本地与云端任务连成一体</h3>
+    <p><strong>为什么选：</strong>不要再用“搭载 o3/o4”概括 Codex。截至本文核对日，OpenAI 官方模型目录已经把 o3 标为被 GPT-5 系列接替，Codex 也有面向 agentic coding 的新模型。更实际的优势是同一个任务可以在 CLI、IDE、桌面与云端执行环境之间流转。这对已经使用 ChatGPT 企业账号、OpenAI 模型和 GitHub 工作流的团队比较省事。</p>
+    <p>Codex CLI 本地读取仓库、执行命令，云端 Codex 则适合并行、长时间运行或由 GitHub 事件驱动的任务。对复杂迁移、算法实现和需要多轮验证的改动，推理模型只是基础，沙箱、审批、任务交接和可恢复执行才是日常效率来源。</p>
+    <p><strong>代价：</strong>官方体验仍围绕 OpenAI 的账号、模型可用性和额度策略。CLI 的开源不自动消除服务端依赖，也不保证任意 OpenAI-compatible 模型都获得同样表现。企业采购前要实测并发任务、模型可用区、数据控制和限额，而不是只看一次对话质量。</p>
+  </section>
+
+  <section class="scenario" id="claude">
+    <span class="pick">场景 B：选 Claude Code</span>
+    <h3>重视自然语言协作、跨文件重构与成熟的扩展面</h3>
+    <p><strong>为什么选：</strong>Claude Code 把读仓库、改文件、跑命令、Git 操作和 PR 流程做成一致体验。官方文档列出的终端、IDE、Desktop 与 Web 并不是四套互不相干的壳；项目指令、MCP 与设置可以跨多个交互面复用。Skills 和 Hooks 适合固化团队流程，Agent SDK 与 Agent teams 则把它从个人工具推向可编排系统。</p>
+    <p>“代码更像人写的”很难脱离仓库和评分规则客观证明。更可靠的判断方式，是拿团队真实任务做盲测：跨十个文件的重构能否维持既有抽象、是否主动跑对测试、reviewer 需要改多少行、失败后能否定位根因。</p>
+    <p><strong>代价：</strong>Claude Code 使用 Claude 模型。通过 AWS Bedrock、Google Vertex AI 或 Microsoft Foundry 接入，解决的是采购、区域和云治理问题，不是切换到非 Anthropic 模型，也不等于把 Claude Code 完整部署进自己的 VPC。长会话、并行 Agent 和大仓库扫描还会更快消耗订阅额度或 API 预算。</p>
+  </section>
+
+  <section class="scenario" id="dsh">
+    <span class="pick">场景 C：选 DeepSeek Harness</span>
+    <h3>要造公司的 Agent 运行平台，而不只是采购一个编码助手</h3>
+    <p><strong>为什么选：</strong>dsh 的核心命题是“Everything is a Plugin”。模型传输、工具注册、Agent loop、会话日志、权限、沙箱和 Web UI 都进入 Cordis 的依赖与生命周期系统。团队可以用 Profile 与配置 patch 组装不同运行环境，也可以把实现 ACP 等协议的外部 Agent 接成子 Agent provider；Claude Code、Codex 能否被调度，取决于对应适配器、认证和许可配置，并非一句“原生挂载”就自动成立。</p>
+    <p>Trajectory 视图与 append-only 会话日志让提示、工具调用和恢复路径更容易检查。这对评测、回放、审计和异构 Agent 实验很有价值。模型供应商或本地集群的切换也被放在明确的适配层，而不是散落在业务代码里。</p>
+    <p><strong>代价：</strong>官方仓库仍明确标注 Developer Preview，并警告会发生破坏性变更。默认 Web UI 端口是 <code>3080</code>，不是常被二手文章写成的 3018。所谓“四级权限隔离”也不是官方固定产品规格：dsh 提供可组合的权限、审批、sandbox 与 preset，但最终安全性取决于实际插件树、Host/Agent plane 边界以及外部进程如何启动。</p>
+  </section>
+
+  <section class="scenario" id="pi">
+    <span class="pick">场景 D：选 Pi Agent</span>
+    <h3>喜欢极简终端，希望模型自由，但不想先搭一套平台</h3>
+    <p><strong>为什么选：</strong>Pi 默认只给模型少数核心工具，把模型选择、会话、上下文压缩和终端交互做稳。它支持多供应商 API、自定义 provider、SDK 与 RPC；接本地 vLLM、Ollama 或其他兼容服务时，是否可用主要由模型能力、协议兼容与硬件决定。Apple Silicon 上也可以通过本地服务接 MLX 模型，但 Pi 本身不是 MLX 推理引擎。</p>
+    <p>Pi 刻意不把 MCP、plan mode 和 sub-agent 固化为唯一内置实现，却允许 extension 注册工具、命令、事件和界面组件，也能通过 package 分享 Skills 与 prompts。对单仓库维护、一次性脚本、SSH 环境和希望审阅每一步的开发者，这种克制往往比一个大型控制台更顺手。</p>
+    <p><strong>代价：</strong>“可 100% 离线”必须满足模型权重、推理服务、依赖和任务数据都不访问外网，不能仅凭使用 Pi 得出。Pi 默认也没有内置文件、进程、网络和凭据权限系统；若处理敏感仓库，应在容器、微型虚拟机或策略沙箱中运行，并审计第三方扩展。</p>
+  </section>
+
+  <h2 id="gateway">网关配置与 API 成本治理</h2>
+
+  <h3>先确认协议，再改 Base URL</h3>
+
+  <p>在 dsh 或 Pi 中接聚合网关、自建代理或本地推理服务时，至少要分别验证模型列表、流式输出、工具调用、推理字段、图片输入、取消请求与错误码。把 <code>BASE_URL</code> 指向一个声称“OpenAI compatible”的地址，只说明路径可能相似，不代表 Responses API、Chat Completions、Anthropic Messages API 和各家的工具调用细节完全等价。</p>
+
+  <pre><code># 示意：变量名以具体 provider/插件文档为准
+export PROVIDER_BASE_URL="https://gateway.example.com/v1"
+export PROVIDER_API_KEY="..."
+
+# 先做小任务：流式响应 → 工具调用 → 取消 → 重试
+# 通过后再让 Agent 修改真实仓库</code></pre>
+
+  <p>密钥应放在环境变量、系统密钥链或 secrets manager 中，不要写进项目 YAML、AGENTS.md、会话分享文件或 Git 历史。第三方中转会看到提示、代码上下文和工具结果，因此需要按新增的数据处理方与供应链节点进行审查。</p>
+
+  <h3>Timeout 不是越大越好</h3>
+
+  <p>长程重构可能让单次流式请求持续数分钟，网关、负载均衡器和客户端的 idle timeout 确实需要协调。把上限设到 300 秒以上可以作为起点，却不能当通用答案。更重要的是区分总请求超时与“多久没有任何字节才断开”，并确认断线后是否能取消上游推理、是否会重复计费、Agent 是否会幂等重试。盲目把所有 timeout 拉到一小时，只会让僵尸请求更难发现。</p>
+
+  <h3>网页免费版不是 API 额度</h3>
+
+  <div class="warning"><strong>账号能聊天，不代表能调用 API。</strong>ChatGPT、Claude 或 Gemini 的网页/应用套餐，与开发者 API 通常是不同的产品、凭据和计费面。某些 Agent 支持用订阅账号登录，那是工具与供应商明确提供的认证路径，不能把网页 Cookie、会话 Token 或所谓“逆向 Key”塞进网关替代正式 API。</div>
+
+  <p>Free tier 也不适合按“零成本生产方案”设计。Agent 一项任务往往包含多次模型调用，RPM、TPM、并发和每日额度任何一项触顶，都会把完成一半的工作留在仓库里。生产使用应配置付费按量账户、预算告警、并发队列和失败恢复；个人试用也应先在干净 Git 分支上运行。</p>
+
+  <h3>Prompt Caching 的正确经济学</h3>
+
+  <p>大型仓库会在多轮调用中反复携带系统提示、工具 schema、项目规则和相同文件片段，Prompt Caching 正好降低这部分重复输入的费用与首 Token 延迟。但“节省 90%”通常描述的是某个供应商对<strong>缓存命中输入 Token 的单价折扣</strong>，不是整项 Agent 任务的总成本必然下降 90%。输出 Token、首次写缓存、未命中的动态上下文、工具执行和本地基础设施仍然计费。</p>
+
+  <ol>
+    <li>保持系统提示和工具 schema 的顺序稳定，把变化快的会话内容放在后面，避免每轮重写固定前缀。</li>
+    <li>分别记录输入、缓存写入、缓存读取、输出、失败重试与子 Agent 成本，不要只看总 Token。</li>
+    <li>继续裁剪无关上下文。缓存降低的是价格和延迟，不会减少无关文件对模型判断的干扰。</li>
+  </ol>
+
+  <h2 id="decision">总结：按使用方式做选择</h2>
+
+  <ul>
+    <li>团队已经使用 OpenAI 或 ChatGPT，并希望在本地和云端之间分派任务，可以先试 Codex。</li>
+    <li>团队偏好 Claude 的交互方式，并需要 MCP、Hooks、Skills 或 Agent SDK，可以先试 Claude Code。</li>
+    <li>平台团队准备自行维护模型路由、loop、权限、会话和 UI，DeepSeek Harness 提供的改造空间最大。</li>
+    <li>只需要一个轻量终端 Agent，并愿意自己选择扩展和隔离方案，Pi 更合适。</li>
+  </ul>
+
+  <p>团队采购不适合用一道算法题决定。可以从真实仓库挑三项任务：跨模块重构、信息不完整的故障定位、带权限限制的自动化。统一记录任务是否完成、人工接管次数、错误改动、端到端时间、缓存命中和总成本。还要专门测试失败恢复：网络中断、模型限流或工具返回非法 JSON 后，仓库是否仍处于可理解、可回滚的状态。</p>
+
+  <h2>参考资料</h2>
+  <ul class="sources">
+    <li><a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer">DeepSeek Harness 官方仓库</a>：项目定位、Developer Preview、Cordis、默认端口与 MIT 许可。</li>
+    <li><a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener noreferrer">Claude Code 官方概览</a>：终端、IDE、Desktop、Web、Git、MCP、Skills、Hooks 与 Agent SDK。</li>
+    <li><a href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">OpenAI Codex 官方仓库</a>：CLI、本地运行、IDE/Desktop/Web 入口与 Apache-2.0 许可。</li>
+    <li><a href="https://developers.openai.com/api/docs/models/all" target="_blank" rel="noopener noreferrer">OpenAI 官方模型目录</a>：当前模型与旧模型状态；本文不沿用已过时的 GPT-4.5/o3 绑定描述。</li>
+    <li><a href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">Pi Agent Harness 官方仓库</a>：多供应商模型层、Agent core、Coding Agent、权限边界与 MIT 许可。</li>
+  </ul>
+</div>
